@@ -6,6 +6,7 @@ export interface DriveItem {
   s3_key?: string;
   size?: number;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface UserInfo {

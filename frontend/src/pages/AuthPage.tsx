@@ -26,14 +26,17 @@ const AuthPage = () => {
         loginData.append('username', formData.username);
         loginData.append('password', formData.password);
 
-        const response = await api.post('/login', loginData, {
+        const response = await api.post('/auth/login', loginData, {
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         });
 
         localStorage.setItem('token', response.data.access_token);
         navigate('/drive');
       } else {
-        await api.post(`/register?username=${formData.username}&password=${formData.password}`);        
+        await api.post('/auth/register', {
+          username: formData.username,
+          password: formData.password
+        });        
         setIsLogin(true);
         setError('Account created! Please sign in.'); 
       }

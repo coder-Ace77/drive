@@ -1,37 +1,41 @@
-from sqlalchemy.orm import Session
-from main import SessionLocal, User, Resource, Hierarchy
-import uuid
+import asyncio
+from app.core.database import init_db
+from app.models.user import User
+from app.models.resource import Resource, ResourceType
+from app.core.security import get_password_hash
+from beanie import PydanticObjectId
 
-def seed_data():
-    db = SessionLocal()
+async def seed_data():
+    await init_db()
     
-    # 1. Create a Root Folder for the user
-    root_folder = Resource(
-        id=uuid.uuid4(),
-        name="My Drive",
-        type="folder",
-        s3_key=None  # Folders don't live on S3
-    )
-    db.add(root_folder)
-    db.flush() # Get the ID of the folder
+    # Check if user exists
+    if await User.find_one(User.username == "adil_user"):
+        print("User already exists.")
+        return
 
-    # 2. Create the User and link them to this root
+    # 1. Create Root Folder (need an ID first if we want strict, or just create it)
+    # Beanie handles IDs.
+    root_folder = Resource(
+        name="My Drive",
+        type=ResourceType.FOLDER,
+        owner_id=PydanticObjectId() # Temporary owner ID, will replace.
+    )
+    # Actually, let's generate the user ID first
+    user_id = PydanticObjectId()
+    root_folder.owner_id = user_id
+    
+    await root_folder.create()
+
+    # 2. Create User
     new_user = User(
+        id=user_id,
         username="adil_user",
+        hashed_password=get_password_hash("password123"),
         root_id=root_folder.id
     )
-    db.add(new_user)
+    await new_user.create()
     
-    # 3. Add the root folder to the hierarchy (Parent is NULL for root)
-    root_hierarchy = Hierarchy(
-        resource_id=root_folder.id,
-        parent_id=None
-    )
-    db.add(root_hierarchy)
-    
-    db.commit()
     print(f"✅ User Created! User ID: {new_user.id} | Root Folder ID: {root_folder.id}")
-    db.close()
 
 if __name__ == "__main__":
-    seed_data()
+    asyncio.run(seed_data())

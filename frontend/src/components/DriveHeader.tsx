@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { 
-  Search, Plus, User, FileUp, FolderUp, 
-  FolderPlus, ChevronDown, ChevronLeft, LogOut 
+import {
+  Search, Plus, User, FileUp, FolderUp,
+  FolderPlus, ChevronDown, ChevronLeft, LogOut,
+  LayoutGrid, List as ListIcon
 } from 'lucide-react';
 
 interface Props {
@@ -9,23 +10,29 @@ interface Props {
   onUploadFile: () => void;
   onUploadFolder: () => void;
   onCreateFolder?: () => void;
-  onLogout: () => void; // New prop
-  onBack: () => void;   // New prop
-  canGoBack: boolean;   // To show/hide back button
+  onLogout: () => void;
+  onBack: () => void;
+  canGoBack: boolean;
+  onSearch: (query: string) => void;
+  viewMode: 'grid' | 'list';
+  onViewModeChange: (mode: 'grid' | 'list') => void;
 }
 
-export const DriveHeader = ({ 
-  username, 
-  onUploadFile, 
-  onUploadFolder, 
-  onCreateFolder, 
+export const DriveHeader = ({
+  username,
+  onUploadFile,
+  onUploadFolder,
+  onCreateFolder,
   onLogout,
   onBack,
-  canGoBack 
+  canGoBack,
+  onSearch,
+  viewMode,
+  onViewModeChange
 }: Props) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  
+
   const menuRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -46,29 +53,52 @@ export const DriveHeader = ({
   return (
     <header className="h-16 border-b border-slate-200 flex items-center justify-between px-6 bg-white sticky top-0 z-10">
       <div className="flex items-center gap-4 flex-1 max-w-2xl">
-          <button 
+        {canGoBack && (
+          <button
             onClick={onBack}
             className="p-2 hover:bg-slate-100 rounded-full text-slate-600 transition-colors"
             title="Go back"
           >
             <ChevronLeft size={24} />
           </button>
+        )}
 
         {/* Search Bar */}
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input 
-            type="text" 
-            placeholder="Search in Drive" 
+          <input
+            type="text"
+            placeholder="Search in Drive"
+            onChange={(e) => onSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all"
           />
         </div>
       </div>
-      
+
       <div className="flex items-center gap-3 ml-4">
+        {/* View Toggle */}
+        <div className="flex items-center bg-slate-100 rounded-lg p-1">
+          <button
+            onClick={() => onViewModeChange('grid')}
+            className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+            title="Grid View"
+          >
+            <LayoutGrid size={18} />
+          </button>
+          <button
+            onClick={() => onViewModeChange('list')}
+            className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+            title="List View"
+          >
+            <ListIcon size={18} />
+          </button>
+        </div>
+
+        <div className="h-8 w-[1px] bg-slate-200 mx-1" />
+
         {/* "New" Dropdown Menu */}
         <div className="relative" ref={menuRef}>
-          <button 
+          <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full font-medium transition shadow-md shadow-blue-100 active:scale-95"
           >
@@ -97,10 +127,10 @@ export const DriveHeader = ({
         </div>
 
         <div className="h-8 w-[1px] bg-slate-200 mx-1" />
-        
+
         {/* User Profile & Logout Dropdown */}
         <div className="relative" ref={userMenuRef}>
-          <button 
+          <button
             onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
             className="flex items-center gap-2 p-1 hover:bg-slate-50 rounded-lg transition-colors"
           >
@@ -118,7 +148,7 @@ export const DriveHeader = ({
               <div className="px-4 py-2 border-b border-slate-50 md:hidden">
                 <p className="font-bold text-sm">{username}</p>
               </div>
-              <button 
+              <button
                 onClick={onLogout}
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-red-600 hover:bg-red-50 transition-colors"
               >
