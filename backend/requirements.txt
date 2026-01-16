@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 beanie
 motor
+bcrypt==3.2.0
 pydantic
 pydantic-settings
 python-jose[cryptography]
