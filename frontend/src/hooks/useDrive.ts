@@ -13,7 +13,6 @@ export const useDrive = () => {
     const [folderHistory, setFolderHistory] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
 
-    // Resumable Session State
     interface UploadSession {
         id: string;
         timestamp: number;
@@ -24,15 +23,12 @@ export const useDrive = () => {
     }
     const [resumableSession, setResumableSession] = useState<UploadSession | null>(null);
 
-    // Initial Fetch checks for session too
     useEffect(() => {
         const init = async () => {
             try {
-                // Check Session
                 const saved = localStorage.getItem('upload_session');
                 if (saved) {
                     const session: UploadSession = JSON.parse(saved);
-                    // Expire after 24h? For now, keep it simple.
                     setResumableSession(session);
                 }
 
@@ -54,8 +50,6 @@ export const useDrive = () => {
         };
         init();
     }, []);
-
-    // ... (processTreeData, refreshDrive, currentItems, searchResults, navigate, goBack, createFolder, deleteItem) ...
 
     const processTreeData = (items: DriveItem[]) => {
         const iMap: Record<string, DriveItem> = {};
@@ -82,7 +76,6 @@ export const useDrive = () => {
         }
     };
 
-    // Derived State
     const currentItems = useMemo(() => {
         if (!currentFolderId) return [];
         const childIds = folderChildrenMap[currentFolderId] || [];
@@ -98,7 +91,6 @@ export const useDrive = () => {
         );
     }, [searchQuery, itemMap]);
 
-    // Navigation
     const navigate = (folderId: string) => {
         if (currentFolderId) {
             setFolderHistory(prev => [...prev, currentFolderId]);
@@ -119,7 +111,6 @@ export const useDrive = () => {
         if (searchQuery) setSearchQuery("");
     };
 
-    // Actions
     const createFolder = async (name: string) => {
         if (!currentFolderId) return;
         try {
@@ -144,12 +135,8 @@ export const useDrive = () => {
         }
     };
 
-    // --- UPLOAD LOGIC with RESUME ---
-
-    // Single file upload core (private helper)
     const _uploadSingle = async (file: File, relativePath: string, parentId: string) => {
         const fileType = file.type || 'application/octet-stream';
-        // 1. Init
         const initRes = await api.post('/upload', {
             parent_id: parentId,
             file_name: file.name,
@@ -157,9 +144,7 @@ export const useDrive = () => {
             relative_path: relativePath
         });
         const { url, resource_id, s3_key, actual_parent_id } = initRes.data;
-        // 2. Put
         await axios.put(url, file, { headers: { 'Content-Type': fileType } });
-        // 3. Confirm
         await api.post('/upload/done', {
             resource_id, parent_id: actual_parent_id, name: file.name, size: file.size, s3_key, relative_path: relativePath
         });
@@ -168,12 +153,9 @@ export const useDrive = () => {
     const uploadFiles = async (files: FileList | File[], isResume = false) => {
         const fileArray = Array.from(files);
         if (fileArray.length === 0) return;
-
-        // Use current folder or the one from session
         const targetId = isResume && resumableSession ? resumableSession.targetFolderId : currentFolderId;
         if (!targetId) return;
 
-        // Initialize Session if new
         let session = resumableSession;
         if (!isResume) {
             session = {
@@ -196,7 +178,6 @@ export const useDrive = () => {
             for (const file of fileArray) {
                 const path = file.webkitRelativePath || file.name;
 
-                // Skip if already done
                 if (session!.completedPaths.includes(path)) {
                     continue;
                 }
@@ -205,31 +186,24 @@ export const useDrive = () => {
 
                 try {
                     await _uploadSingle(file, path, targetId);
-
-                    // Update Session
                     session!.completedPaths.push(path);
                     localStorage.setItem('upload_session', JSON.stringify(session));
-                    setResumableSession({ ...session! }); // Force update
+                    setResumableSession({ ...session! }); 
                     completedCount++;
 
                 } catch (err) {
                     console.error(`Failed to upload ${file.name}`, err);
-                    // Continue to next? Or stop? 
-                    // Stopping is safer for resume logic. User can retry.
                     toast.error(`Error uploading ${file.name}. Reload to resume later.`, { id: toastId });
                     throw err;
                 }
             }
 
-            // Success: Clear Session
             localStorage.removeItem('upload_session');
             setResumableSession(null);
             await refreshDrive();
             toast.success("Upload complete!", { id: toastId });
 
         } catch (err) {
-            // Error already shown above for file. 
-            // Session remains in localStorage for resume.
         }
     };
 
@@ -253,44 +227,27 @@ export const useDrive = () => {
         return total;
     };
 
-    // Sharing State
     const [activeTab, setActiveTab] = useState<'drive' | 'shared'>('drive');
     const [sharedItems, setSharedItems] = useState<DriveItem[]>([]);
 
     useEffect(() => {
         if (activeTab === 'shared') {
             fetchSharedItems();
-            // Reset to root of shared tab? 
-            // If we are deep navigating shared folders, we rely on currentFolderId.
         } else {
-            // Switch back to drive root if needed? 
-            // For now, let's keep separate history or reset?
-            // If switching tabs, we might want to reset `currentFolderId` to root or keep it?
-            // Let's reset to root if we switch back to drive to avoid confusion?
             if (user?.root_id && !currentFolderId) {
                 setCurrentFolderId(user.root_id);
             }
         }
     }, [activeTab]);
 
-    // Fetch folder contents if needed (for shared folders not in tree)
     useEffect(() => {
         const fetchFolderContents = async () => {
             if (!currentFolderId) return;
-
-            // If we already have children in map, no need to fetch (unless force refresh?)
             if (folderChildrenMap[currentFolderId]) return;
-
-            // If we are in 'drive' tab, we expect tree to have everything? 
-            // But maybe lazily loaded?
-            // If 'shared' tab, we DEFINITELY need to fetch if not in map.
-
             setIsLoading(true);
             try {
                 const res = await api.get(`/folders/${currentFolderId}`);
                 const children = res.data.children;
-
-                // Merge into maps
                 const newIMap = { ...itemMap };
                 const newCMap = { ...folderChildrenMap };
 
@@ -304,16 +261,12 @@ export const useDrive = () => {
                 setFolderChildrenMap(newCMap);
             } catch (err) {
                 console.error("Failed to fetch folder contents", err);
-
-                // If 403/404, maybe go back?
             } finally {
                 setIsLoading(false);
             }
         };
 
         if (currentFolderId && !folderChildrenMap[currentFolderId] && currentFolderId !== user?.root_id) {
-            // Only fetch if it's not the root (which should be in tree)
-            // And if we are actually navigating.
             fetchFolderContents();
         }
     }, [currentFolderId, activeTab]);

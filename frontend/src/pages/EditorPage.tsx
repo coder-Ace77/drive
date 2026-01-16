@@ -10,8 +10,6 @@ const EditorPage = () => {
     const navigate = useNavigate();
     const [content, setContent] = useState<string>("");
     const [originalContent, setOriginalContent] = useState<string>("");
-    // const [fileName, setFileName] = useState("");
-    // const [language, setLanguage] = useState("plaintext");
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -20,32 +18,14 @@ const EditorPage = () => {
         const fetchContent = async () => {
             if (!id) return;
             try {
-                // Get Metadata first to determine type/name/language
-                // But we don't have a single-get endpoint for metadata without content?
-                // Actually `get_tree` or `shared` but we can't easily find it by ID efficiently if not in tree.
-                // We'll just fetch content first, assuming it's editable. 
-                // Wait, if it's large binary, we might crash?
-                // For now, let's assume we navigate here only for text files.
-                // We can fetch metadata via `get_download_link`? No.
-
-                // Let's rely on standard fetch.
                 const downloadRes = await api.get(`/download/${id}`);
                 const url = downloadRes.data.url;
-
-                // Fetch actual text
                 const textRes = await fetch(url);
                 if (!textRes.ok) throw new Error("Failed to fetch content");
                 const text = await textRes.text();
 
                 setContent(text);
                 setOriginalContent(text);
-
-                // Determine language from ID? We lack filename here unless passed in state?
-                // We could pass state in navigate location?
-                // Or we fetch tree/search to find Name? 
-                // Let's try to get resources info (we need metadata endpoint eventually).
-                // For now, we rely on the URL or the previous page passing state?
-                // Navigating with state is standard.
 
             } catch (err) {
                 console.error(err);
@@ -57,20 +37,6 @@ const EditorPage = () => {
         };
         fetchContent();
     }, [id, navigate]);
-
-    // Hack to get filename/language: useLocation state? 
-    // Or add `GET /resources/{id}` metadata endpoint?
-    // We already have `GET /folders/{id}` but not single file metadata separate from tree.
-    // Let's implement basic Extension detection if we had the name.
-    // I highly recommend adding a `GET /resources/{id}/metadata` or reuse something.
-    // Buuuut, for now, I'll update `get_download_link` return? No.
-    // Let's assume passed via state or use `location.state`.
-
-    // ...
-    // Wait, the `download` endpoint returns URL. The filename is in the Content-Disposition header of the response from S3?
-    // Not easily accessible to JS fetch if CORS doesn't expose it.
-
-    // PLAN B: Update `DrivePage` to pass `{ type: 'file', name: 'foo.ts', ... }` in navigation state.
 
     const handleSave = async () => {
         if (!id) return;
@@ -99,10 +65,7 @@ const EditorPage = () => {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [content, id]); // Re-bind when content changes? No, handleSave uses ref or current state? 
-    // State in closure problem? Yes. Use Ref or dependency.
-    // Ideally use useCallback for handleSave.
-
+    }, [content, id]); 
     const hasChanges = content !== originalContent;
 
     if (isLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin" /></div>;

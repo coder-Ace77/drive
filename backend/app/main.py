@@ -10,10 +10,8 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     await init_db()
     yield
-    # Shutdown (if needed)
 
 app = FastAPI(
     title="Enterprise Drive Backend",
