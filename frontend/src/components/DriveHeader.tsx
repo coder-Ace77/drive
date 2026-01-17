@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import {
   Search, Plus, User, FileUp, FolderUp,
   FolderPlus, ChevronDown, ChevronLeft, LogOut,
-  LayoutGrid, List as ListIcon
+  LayoutGrid, List as ListIcon, Menu
 } from 'lucide-react';
 
 interface Props {
@@ -16,6 +16,7 @@ interface Props {
   onSearch: (query: string) => void;
   viewMode: 'grid' | 'list';
   onViewModeChange: (mode: 'grid' | 'list') => void;
+  onMenuClick: () => void;
 }
 
 export const DriveHeader = ({
@@ -28,7 +29,8 @@ export const DriveHeader = ({
   canGoBack,
   onSearch,
   viewMode,
-  onViewModeChange
+  onViewModeChange,
+  onMenuClick
 }: Props) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -51,8 +53,15 @@ export const DriveHeader = ({
   }, []);
 
   return (
-    <header className="h-16 border-b border-slate-200 flex items-center justify-between px-6 bg-white sticky top-0 z-10">
+    <header className="h-16 border-b border-slate-200 flex items-center justify-between px-4 md:px-6 bg-white sticky top-0 z-10">
       <div className="flex items-center gap-4 flex-1 max-w-2xl">
+        <button
+          onClick={onMenuClick}
+          className="p-2 -ml-2 text-slate-600 md:hidden"
+        >
+          <Menu size={24} />
+        </button>
+
         {canGoBack && (
           <button
             onClick={onBack}
@@ -68,16 +77,16 @@ export const DriveHeader = ({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input
             type="text"
-            placeholder="Search in Drive"
+            placeholder="Search"
             onChange={(e) => onSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all"
           />
         </div>
       </div>
 
-      <div className="flex items-center gap-3 ml-4">
+      <div className="flex items-center gap-2 md:gap-3 ml-2 md:ml-4">
         {/* View Toggle */}
-        <div className="flex items-center bg-slate-100 rounded-lg p-1">
+        <div className="hidden sm:flex items-center bg-slate-100 rounded-lg p-1">
           <button
             onClick={() => onViewModeChange('grid')}
             className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
@@ -94,17 +103,17 @@ export const DriveHeader = ({
           </button>
         </div>
 
-        <div className="h-8 w-[1px] bg-slate-200 mx-1" />
+        <div className="hidden sm:block h-8 w-[1px] bg-slate-200 mx-1" />
 
         {/* "New" Dropdown Menu */}
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full font-medium transition shadow-md shadow-blue-100 active:scale-95"
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 md:px-4 py-2 rounded-full font-medium transition shadow-md shadow-blue-100 active:scale-95"
           >
             <Plus size={20} />
             <span className="hidden sm:inline">New</span>
-            <ChevronDown size={16} className={`transition-transform ${isMenuOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown size={16} className={`hidden sm:block transition-transform ${isMenuOpen ? 'rotate-180' : ''}`} />
           </button>
 
           {isMenuOpen && (
@@ -126,7 +135,7 @@ export const DriveHeader = ({
           )}
         </div>
 
-        <div className="h-8 w-[1px] bg-slate-200 mx-1" />
+        <div className="hidden md:block h-8 w-[1px] bg-slate-200 mx-1" />
 
         {/* User Profile & Logout Dropdown */}
         <div className="relative" ref={userMenuRef}>

@@ -47,6 +47,7 @@ const DrivePage = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
     return (localStorage.getItem('view_mode') as 'grid' | 'list') || 'grid';
   });
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('view_mode', viewMode);
@@ -184,6 +185,8 @@ const DrivePage = () => {
         onNavigate={navigateToFolder}
         activeTab={activeTab}
         onTabChange={setActiveTab}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -222,6 +225,7 @@ const DrivePage = () => {
           onSearch={setSearchQuery}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
+          onMenuClick={() => setIsSidebarOpen(true)}
         />
 
         <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />

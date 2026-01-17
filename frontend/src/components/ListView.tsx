@@ -25,11 +25,11 @@ const formatSize = (bytes: number = 0) => {
 export const ListView = ({ items, selectedId, onSelect, onItemClick, onDownload, onDelete, getFolderSize, onShare, isSharedView = false }: Props) => {
     return (
         <div className="flex flex-col">
-            <div className="grid grid-cols-12 gap-4 px-6 py-3 border-b border-slate-100 text-sm font-medium text-slate-500">
-                <div className="col-span-6">Name</div>
-                <div className="col-span-2">Size</div>
-                <div className="col-span-3">Last Modified</div>
-                <div className="col-span-1 text-center">Actions</div>
+            <div className="grid grid-cols-12 gap-4 px-4 md:px-6 py-3 border-b border-slate-100 text-sm font-medium text-slate-500 min-w-full">
+                <div className="col-span-8 md:col-span-6">Name</div>
+                <div className="hidden md:block md:col-span-2">Size</div>
+                <div className="hidden md:block md:col-span-3">Last Modified</div>
+                <div className="col-span-4 md:col-span-1 text-center">Actions</div>
             </div>
 
             <div className="flex-1 overflow-y-auto">
@@ -42,29 +42,29 @@ export const ListView = ({ items, selectedId, onSelect, onItemClick, onDownload,
                             key={item.id}
                             onClick={() => onSelect(item)}
                             onDoubleClick={() => onItemClick(item)}
-                            className={`grid grid-cols-12 gap-4 px-6 py-3 items-center border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer group ${isSelected ? 'bg-blue-50/50 hover:bg-blue-50' : ''
+                            className={`grid grid-cols-12 gap-4 px-4 md:px-6 py-3 items-center border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer group ${isSelected ? 'bg-blue-50/50 hover:bg-blue-50' : ''
                                 }`}
                         >
-                            <div className="col-span-6 flex items-center gap-3">
+                            <div className="col-span-8 md:col-span-6 flex items-center gap-3 overflow-hidden">
                                 {item.type === 'folder' ? (
-                                    <Folder className="text-blue-500 fill-blue-500/20" size={20} />
+                                    <Folder className="text-blue-500 fill-blue-500/20 flex-shrink-0" size={20} />
                                 ) : (
-                                    <FileText className="text-slate-400" size={20} />
+                                    <FileText className="text-slate-400 flex-shrink-0" size={20} />
                                 )}
                                 <span className={`font-medium truncate ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
                                     {item.name}
                                 </span>
                             </div>
 
-                            <div className="col-span-2 text-sm text-slate-500">
+                            <div className="hidden md:block md:col-span-2 text-sm text-slate-500">
                                 {formatSize(size)}
                             </div>
 
-                            <div className="col-span-3 text-sm text-slate-500">
+                            <div className="hidden md:block md:col-span-3 text-sm text-slate-500">
                                 {item.updated_at ? format(new Date(item.updated_at), 'MMM d, yyyy') : '-'}
                             </div>
 
-                            <div className="col-span-1 flex justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="col-span-4 md:col-span-1 flex justify-end md:justify-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
                                 {!isSharedView && (
                                     <button
                                         onClick={(e) => { e.stopPropagation(); onShare(item); }}
