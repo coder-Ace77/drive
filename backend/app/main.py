@@ -21,7 +21,7 @@ import asyncio
 async def run_cleanup_periodically():
     while True:
         try:
-            await asyncio.sleep(30)
+            await asyncio.sleep(3600)
             await cleanup_service.cleanup_deleted_resources()
         except asyncio.CancelledError:
             break
