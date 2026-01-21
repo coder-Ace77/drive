@@ -51,4 +51,7 @@ class S3Service:
     def download_file(self, key: str, destination_path: str):
         self.client.download_file(self.bucket, key, destination_path)
 
+    def get_object_stream(self, key: str):
+        return self.client.get_object(Bucket=self.bucket, Key=key)['Body']
+
 s3_service = S3Service()

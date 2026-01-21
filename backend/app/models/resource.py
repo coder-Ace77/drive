@@ -23,11 +23,19 @@ class Resource(Document):
     created_at: datetime = datetime.now()
     updated_at: datetime = datetime.now()
     shared_with: List[Permission] = []
+    is_deleted: bool = False
+    deleted_at: Optional[datetime] = None
     
     class Settings:
         name = "resources"
         indexes = [
             "parent_id",
             "owner_id",
-            [("parent_id", 1), ("name", 1), ("type", 1)]  # Compound index for uniqueness within folder check
+            "is_deleted",
+            [
+                ("parent_id", 1),
+                ("name", 1),
+                ("type", 1),
+                ("is_deleted", 1)
+            ]
         ]

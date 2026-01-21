@@ -3,9 +3,9 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from app.core.config import get_settings
 from app.models.user import User
-from beanie import PydanticObjectId
 
 settings = get_settings()
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:

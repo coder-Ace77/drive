@@ -1,4 +1,4 @@
-import { Folder, FileText, Download, Trash2, Share2 } from 'lucide-react';
+import { Folder, FileText, Download, Trash2, Share2, Check } from 'lucide-react';
 import type { DriveItem } from '../types/index';
 
 interface Props {
@@ -10,64 +10,113 @@ interface Props {
   onDelete: (id: string) => void;
   onShare: (item: DriveItem) => void;
   isSharedView?: boolean;
+  // Selection Props
+  selectedItems?: Set<string>;
+  onToggleSelection?: (id: string) => void;
+  clipboard?: { mode: 'copy' | 'cut'; items: string[] } | null;
 }
 
-export const FileGrid = ({ items, selectedId, onSelect, onItemClick, onDownload, onDelete, onShare, isSharedView = false }: Props) => {
+export const FileGrid = ({
+  items,
+  selectedId,
+  onSelect,
+  onItemClick,
+  onDownload,
+  onDelete,
+  onShare,
+  isSharedView = false,
+  selectedItems,
+  onToggleSelection,
+  clipboard
+}: Props) => {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 p-6">
-      {items.map((item) => (
-        <div
-          key={item.id}
-          onClick={() => onSelect(item)}
-          onDoubleClick={() => onItemClick(item)}
-          className={`p-4 rounded-xl border transition-all cursor-pointer group relative ${selectedId === item.id
-            ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-200'
-            : 'bg-white border-slate-100 hover:border-slate-300 hover:shadow-sm'
-            }`}
-        >
-          {/* Action Overlay for Selected Item */}
-          {selectedId === item.id && (
-            <div className="absolute top-2 right-2 flex gap-1 z-10">
-              {!isSharedView && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onShare(item); }}
-                  className="p-1 hover:bg-blue-100 rounded text-blue-600"
-                  title="Share"
-                >
-                  <Share2 size={16} />
-                </button>
-              )}
-              <button
-                onClick={(e) => { e.stopPropagation(); onDownload(item); }}
-                className="p-1 hover:bg-blue-100 rounded text-blue-600"
-                title="Download"
-              >
-                <Download size={16} />
-              </button>
-              {!isSharedView && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
-                  className="p-1 hover:bg-red-100 rounded text-red-600"
-                  title="Delete"
-                >
-                  <Trash2 size={16} />
-                </button>
-              )}
-            </div>
-          )}
+      {items.map((item) => {
+        const isSelected = selectedItems?.has(item.id);
+        const isCut = clipboard?.mode === 'cut' && clipboard.items.includes(item.id);
 
-          <div className="flex flex-col items-center text-center">
-            {item.type === 'folder' ? (
-              <Folder className="text-blue-500 fill-blue-500/10 mb-3" size={48} />
-            ) : (
-              <FileText className="text-slate-400 mb-3" size={48} />
+        return (
+          <div
+            key={item.id}
+            onClick={() => {
+              if (onToggleSelection && isSelected) {
+                onToggleSelection(item.id);
+              } else {
+                onSelect(item);
+              }
+            }}
+            onDoubleClick={() => onItemClick(item)}
+            className={`p-4 rounded-xl border transition-all cursor-pointer group relative 
+              ${isSelected
+                ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500 shadow-md'
+                : selectedId === item.id
+                  ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-200'
+                  : 'bg-white border-slate-100 hover:border-slate-300 hover:shadow-sm'}
+              ${isCut ? 'opacity-50 grayscale border-dashed' : ''}
+              `}
+          >
+            {/* Checkbox Overlay */}
+            {onToggleSelection && (
+              <div
+                className={`absolute top-3 left-3 z-10 ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleSelection(item.id);
+                }}
+              >
+                <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${isSelected ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300 hover:border-blue-400'}`}>
+                  {isSelected && <Check size={14} className="text-white" />}
+                </div>
+              </div>
             )}
-            <span className="text-sm font-medium text-slate-700 truncate w-full px-2">
-              {item.name}
-            </span>
+
+            {/* Action Overlay for Selected Item (Only show actions when hovering specifically if not in selection mode, or keep existing behavior?) 
+              Let's keep existing behavior for single selection actions for now, but maybe hide them if in multi-select mode?
+              Actually, let's keep them accessible.
+          */}
+            {selectedId === item.id && !isSelected && (
+              <div className="absolute top-2 right-2 flex gap-1 z-10">
+                {!isSharedView && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onShare(item); }}
+                    className="p-1 hover:bg-blue-100 rounded text-blue-600"
+                    title="Share"
+                  >
+                    <Share2 size={16} />
+                  </button>
+                )}
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDownload(item); }}
+                  className="p-1 hover:bg-blue-100 rounded text-blue-600"
+                  title="Download"
+                >
+                  <Download size={16} />
+                </button>
+                {!isSharedView && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
+                    className="p-1 hover:bg-red-100 rounded text-red-600"
+                    title="Delete"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col items-center text-center mt-2">
+              {item.type === 'folder' ? (
+                <Folder className="text-blue-500 fill-blue-500/10 mb-3" size={48} />
+              ) : (
+                <FileText className="text-slate-400 mb-3" size={48} />
+              )}
+              <span className="text-sm font-medium text-slate-700 truncate w-full px-2">
+                {item.name}
+              </span>
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   );
 };

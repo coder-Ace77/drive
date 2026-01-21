@@ -38,7 +38,6 @@ export const DriveHeader = ({
   const menuRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -72,7 +71,6 @@ export const DriveHeader = ({
           </button>
         )}
 
-        {/* Search Bar */}
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input
@@ -85,7 +83,6 @@ export const DriveHeader = ({
       </div>
 
       <div className="flex items-center gap-2 md:gap-3 ml-2 md:ml-4">
-        {/* View Toggle */}
         <div className="hidden sm:flex items-center bg-slate-100 rounded-lg p-1">
           <button
             onClick={() => onViewModeChange('grid')}

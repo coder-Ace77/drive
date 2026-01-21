@@ -38,6 +38,15 @@ class FileUploadInit(BaseModel):
     file_type: str
     relative_path: Optional[str] = None
 
+class FileInitItem(BaseModel):
+    file_name: str
+    file_type: str
+    relative_path: Optional[str] = None
+
+class BulkFileUploadInit(BaseModel):
+    parent_id: PydanticObjectId
+    files: List[FileInitItem]
+
 class FileUploadResponse(BaseModel):
     url: str
     resource_id: PydanticObjectId
@@ -53,3 +62,19 @@ class FileUploadConfirm(BaseModel):
     name: str
     size: int
     s3_key: str
+
+class BulkDeleteRequest(BaseModel):
+    resource_ids: List[PydanticObjectId]
+
+class TreeDelta(BaseModel):
+    added: List[ResourceResponse] = []
+    updated: List[ResourceResponse] = []
+    deleted: List[PydanticObjectId] = []
+
+class BulkInitResponse(BaseModel):
+    files: List[FileUploadResponse]
+    delta: TreeDelta
+
+class ResourceMoveRequest(BaseModel):
+    resource_ids: List[PydanticObjectId]
+    target_parent_id: PydanticObjectId
