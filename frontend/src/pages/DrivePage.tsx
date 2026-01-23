@@ -47,7 +47,7 @@ const DrivePage = () => {
 
   const { selectedItems, toggleSelection, clearSelection, } = useDriveSelection(items);
   const { clipboard, copyItems, cutItems, pasteItems } = useDriveClipboard(refreshDrive, applyDelta);
-  const { resumableSession, uploadFiles, clearSession, isUploading } = useDriveUpload(currentFolderId, applyDelta);
+  const { resumableSession, uploadFiles, clearSession, isUploading, cancelUpload } = useDriveUpload(currentFolderId, applyDelta);
 
   const { createFolder,
     deleteItem,
@@ -241,6 +241,8 @@ const DrivePage = () => {
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           onMenuClick={() => setIsSidebarOpen(true)}
+          isUploading={isUploading}
+          onCancelUpload={cancelUpload}
         />
 
         <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />

@@ -36,7 +36,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
                 <div className="flex items-center justify-between px-2 mb-8">
                     <div className="flex items-center gap-2">
-                        <div className="bg-blue-600 p-1.5 rounded-lg shadow-lg shadow-blue-100">
+                        <div className="w-8 h-8 flex items-center justify-center bg-blue-600 rounded-lg shadow-sm">
                             <HardDrive className="text-white" size={20} />
                         </div>
                         <span className="font-bold text-xl tracking-tight text-slate-800">Drive</span>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import axios from 'axios';
 import { driveService } from '../../service/driveService';
@@ -19,6 +19,8 @@ export const useDriveUpload = (
     const [resumableSession, setResumableSession] = useState<UploadSession | null>(null);
     const [isUploading, setIsUploading] = useState(false);
 
+    const abortControllerRef = useRef<AbortController | null>(null);
+
     // Load session on mount
     useEffect(() => {
         const saved = localStorage.getItem('upload_session');
@@ -27,11 +29,28 @@ export const useDriveUpload = (
         }
     }, []);
 
+    const cancelUpload = () => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+        setIsUploading(false);
+        setResumableSession(null);
+        localStorage.removeItem('upload_session');
+        toast.info("Upload cancelled");
+    };
+
     const uploadFiles = async (files: FileList | File[], isResume = false) => {
         const fileArray = Array.from(files);
         if (fileArray.length === 0) return;
         const targetId = isResume && resumableSession ? resumableSession.targetFolderId : currentFolderId;
         if (!targetId) return;
+
+        // Reset controller for new upload
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+        abortControllerRef.current = new AbortController();
 
         let session = resumableSession;
         if (!isResume) {
@@ -87,6 +106,11 @@ export const useDriveUpload = (
 
             const CONCURRENCY = 5;
             for (let i = 0; i < pendingFiles.length; i += CONCURRENCY) {
+                // Check cancellation before batch
+                if (abortControllerRef.current?.signal.aborted) {
+                    throw new Error('Upload cancelled');
+                }
+
                 const batch = pendingFiles.slice(i, i + CONCURRENCY);
 
                 await Promise.all(batch.map(async (file, batchIndex) => {
@@ -96,7 +120,8 @@ export const useDriveUpload = (
 
                     try {
                         await axios.put(config.url, file, {
-                            headers: { 'Content-Type': file.type || 'application/octet-stream' }
+                            headers: { 'Content-Type': file.type || 'application/octet-stream' },
+                            signal: abortControllerRef.current?.signal
                         });
 
                         const confirmRes = await driveService.uploadConfirm({
@@ -117,6 +142,9 @@ export const useDriveUpload = (
                         session!.completedPaths.push(path);
 
                     } catch (err) {
+                        if (axios.isCancel(err)) {
+                            throw err;
+                        }
                         console.error(`Failed to upload ${file.name}`, err);
                         // Optional: Keep error toasts as they are important
                         toast.error(`Error uploading ${file.name}.`);
@@ -132,10 +160,18 @@ export const useDriveUpload = (
             toast.success("Upload complete!");
 
         } catch (err) {
-            console.error("Bulk upload failed", err);
-            toast.error("Upload failed", { id: toastId });
+            if (axios.isCancel(err) || (err as Error).message === 'Upload cancelled') {
+                console.log("Upload was cancelled");
+                // Toast handled in cancelUpload or not needed
+            } else {
+                console.error("Bulk upload failed", err);
+                toast.error("Upload failed", { id: toastId });
+            }
         } finally {
-            setIsUploading(false);
+            if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
+                setIsUploading(false);
+                abortControllerRef.current = null;
+            }
         }
     };
 
@@ -148,6 +184,7 @@ export const useDriveUpload = (
         resumableSession,
         uploadFiles,
         clearSession,
-        isUploading
+        isUploading,
+        cancelUpload
     };
 };

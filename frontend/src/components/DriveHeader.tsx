@@ -17,6 +17,8 @@ interface Props {
   viewMode: 'grid' | 'list';
   onViewModeChange: (mode: 'grid' | 'list') => void;
   onMenuClick: () => void;
+  isUploading?: boolean;
+  onCancelUpload?: () => void;
 }
 
 export const DriveHeader = ({
@@ -30,7 +32,9 @@ export const DriveHeader = ({
   onSearch,
   viewMode,
   onViewModeChange,
-  onMenuClick
+  onMenuClick,
+  isUploading = false,
+  onCancelUpload
 }: Props) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -104,14 +108,24 @@ export const DriveHeader = ({
 
         {/* "New" Dropdown Menu */}
         <div className="relative" ref={menuRef}>
-          <button
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 md:px-4 py-2 rounded-full font-medium transition shadow-md shadow-blue-100 active:scale-95"
-          >
-            <Plus size={20} />
-            <span className="hidden sm:inline">New</span>
-            <ChevronDown size={16} className={`hidden sm:block transition-transform ${isMenuOpen ? 'rotate-180' : ''}`} />
-          </button>
+          {isUploading ? (
+            <button
+              onClick={onCancelUpload}
+              className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-3 md:px-4 py-2 rounded-full font-medium transition shadow-md shadow-red-100 active:scale-95"
+            >
+              <LogOut size={20} className="rotate-180" />
+              <span className="hidden sm:inline">Stop Upload</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 md:px-4 py-2 rounded-full font-medium transition shadow-md shadow-blue-100 active:scale-95"
+            >
+              <Plus size={20} />
+              <span className="hidden sm:inline">New</span>
+              <ChevronDown size={16} className={`hidden sm:block transition-transform ${isMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+          )}
 
           {isMenuOpen && (
             <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-xl py-2 z-50 animate-in fade-in zoom-in duration-100">
