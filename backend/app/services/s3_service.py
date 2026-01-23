@@ -11,7 +11,8 @@ class S3Service:
             aws_access_key_id=settings.aws_access_key_id,
             aws_secret_access_key=settings.aws_secret_access_key,
             region_name=settings.aws_region,
-            config=Config(signature_version='s3v4')
+            endpoint_url=f'https://s3.{settings.aws_region}.amazonaws.com',
+            config=Config(signature_version='s3v4',s3={'addressing_style': 'path'})
         )
         self.bucket = settings.s3_bucket_name
 
