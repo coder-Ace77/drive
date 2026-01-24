@@ -9,11 +9,30 @@ from app.services.permission_service import permission_service
 from datetime import datetime
 import logging
 import time
+import os
+import redis.asyncio as redis
+import json
+from beanie.operators import In
 
 logger = logging.getLogger(__name__)
 
 
 class MetadataService:
+    def __init__(self):
+        self.redis_client = redis.Redis(
+            host=os.getenv("REDIS_HOST", "localhost"),
+            port=int(os.getenv("REDIS_PORT", 6379)),
+            password=os.getenv("REDIS_PASSWORD", None),
+            decode_responses=True,
+            ssl=True
+        )
+
+    async def _invalidate_tree_cache(self, user_id):
+        try:
+            await self.redis_client.delete(f"drive:tree:{user_id}")
+        except Exception as e:
+            logger.error(f"Redis invalidation error: {e}")
+
     async def create_folder(self, folder_in: FolderCreate, current_user: User) -> Resource:
         parent = await Resource.get(folder_in.parent_id)
         if not parent:
@@ -26,6 +45,7 @@ class MetadataService:
             owner_id=current_user.id
         )
         await new_folder.create()
+        await self._invalidate_tree_cache(current_user.id)
         return new_folder
 
     async def get_folder_contents(self, folder_id: PydanticObjectId, current_user: User) -> dict:
@@ -43,8 +63,20 @@ class MetadataService:
 
     async def get_tree(self, current_user: User) -> dict:
         start_time = time.time()
+        
+        # Check Cache
+        cache_key = f"drive:tree:{current_user.id}"
+        try:
+            cached_tree = await self.redis_client.get(cache_key)
+            if cached_tree:
+                logger.info("Serving tree from Redis cache")
+                return json.loads(cached_tree)
+        except Exception as e:
+            logger.error(f"Redis get error: {e}")
+            
         if not current_user.root_id:
             return {"tree": []}
+            
         pipeline = [
             {"$match": {"_id": current_user.root_id}},
             {
@@ -96,37 +128,75 @@ class MetadataService:
 
         duration = time.time() - start_time
         logger.info(f"Tree fetch completed in {duration:.4f}s. Nodes: {len(clean_nodes)}")
-        return {"tree": clean_nodes}
+        
+        result = {"tree": clean_nodes}
+        
+        # Set Cache (5 minutes)
+        try:
+             await self.redis_client.setex(cache_key, 300, json.dumps(result))
+        except Exception as e:
+             logger.error(f"Redis set error: {e}")
+             
+        return result
 
-    async def share_resource(self, resource_id: PydanticObjectId, target_username: str, current_user: User) -> dict:
-        if not target_username:
-            raise HTTPException(status_code=400, detail="Username required")
-    
+    async def share_resource(self, resource_id: PydanticObjectId, username: str, current_user: User, permission_type: str = "read") -> dict:
         resource = await Resource.get(resource_id)
-        if not resource or resource.is_deleted:
+        if not resource:
             raise HTTPException(status_code=404, detail="Resource not found")
             
-        permission_service.verify_owner(resource, current_user)
-    
-        target_user = await User.find_one(User.username == target_username)
-        if not target_user:
+        await permission_service.verify_owner(resource, current_user)
+        
+        user_to_share = await User.find_one(User.username == username)
+        if not user_to_share:
             raise HTTPException(status_code=404, detail="User not found")
             
-        if target_user.id == current_user.id:
-            raise HTTPException(status_code=400, detail="Cannot share with self")
-    
-        for perm in resource.shared_with:
-            if perm.user_id == target_user.id:
-                return {"message": "Already shared"}
-    
-        resource.shared_with.append(Permission(
-            user_id=target_user.id,
-            username=target_user.username,
-            type="read"
-        ))
-        await resource.save()
+        if user_to_share.id == current_user.id:
+             raise HTTPException(status_code=400, detail="Cannot share with yourself")
+
+        if permission_type not in ["read", "editor"]:
+            raise HTTPException(status_code=400, detail="Invalid permission type. Must be 'read' or 'editor'")
         
-        return {"message": "Shared successfully"}
+        # Check if already shared
+        existing = next((p for p in resource.shared_with if p.user_id == user_to_share.id), None)
+        if existing:
+            existing.type = permission_type # Update permission
+        else:
+            resource.shared_with.append(Permission(
+                user_id=user_to_share.id, 
+                username=user_to_share.username,
+                type=permission_type
+            ))
+            
+        await resource.save()
+        return resource
+
+    async def unshare_resource(self, resource_id: PydanticObjectId, username: str, current_user: User) -> dict:
+        resource = await Resource.get(resource_id)
+        if not resource:
+            raise HTTPException(status_code=404, detail="Resource not found")
+            
+        await permission_service.verify_owner(resource, current_user)
+        
+        user_to_unshare = await User.find_one(User.username == username)
+        
+        # Atomic pull but we need the updated document to return. 
+        # Beanie's updates doesn't return the new doc easily unless we re-fetch or use find_one_and_update
+        # Let's use re-fetch approach for simplicity or Python list manipulation + save if race condition isn't huge concern.
+        # Given "concurrent scenarios", allow atomic update is better.
+        # But we need to return it.
+        
+        if user_to_unshare:
+             await Resource.find({"_id": resource_id}).update(
+                 {"$pull": {"shared_with": {"user_id": user_to_unshare.id}}}
+             )
+        else:
+             await Resource.find({"_id": resource_id}).update(
+                 {"$pull": {"shared_with": {"username": username}}}
+             )
+        
+        # Re-fetch to return
+        updated_resource = await Resource.get(resource_id)
+        return updated_resource
 
     async def get_shared_resources(self, current_user: User) -> List[Resource]:
         shared = await Resource.find(
@@ -141,11 +211,13 @@ class MetadataService:
         if not resource or resource.is_deleted:
             raise HTTPException(status_code=404, detail="Not found")
         
-        permission_service.verify_owner(resource, current_user)
+        await permission_service.verify_write_access(resource, current_user)
         
         resource.is_deleted = True
         resource.deleted_at = datetime.now()
         await resource.save()
+        
+        await self._invalidate_tree_cache(current_user.id)
         
         return {
             "deleted": [resource_id],
@@ -154,24 +226,33 @@ class MetadataService:
         }
 
     async def delete_resources_bulk(self, resource_ids: List[PydanticObjectId], current_user: User) -> dict:
-        # 1. Find all resources that exist, are NOT deleted, and belong to current_user
-        to_delete = await Resource.find(
+        # Fetch valid resources first
+        to_delete_candidates = await Resource.find(
             {"_id": {"$in": resource_ids}},
-            Resource.owner_id == current_user.id,
             Resource.is_deleted != True
         ).to_list()
         
-        if not to_delete:
+        real_ids = []
+        for res in to_delete_candidates:
+            # Check permission for each
+            try:
+                # We check access silently, skip if no access
+                if await permission_service.check_write_access(res, current_user):
+                    real_ids.append(res.id)
+            except:
+                pass
+        
+        if not real_ids:
             return {"message": "No valid resources to delete", "deleted_count": 0}
             
-        real_ids = [r.id for r in to_delete]
-        
         # 2. Bulk Update
         await Resource.find(
             {"_id": {"$in": real_ids}}
         ).update(
             {"$set": {"is_deleted": True, "deleted_at": datetime.now()}}
         )
+        
+        await self._invalidate_tree_cache(current_user.id)
         
         return {
             "deleted": real_ids,
@@ -184,7 +265,7 @@ class MetadataService:
         if not resource:
             raise HTTPException(status_code=404, detail="File not found")    
         
-        permission_service.verify_owner(resource, current_user)
+        await permission_service.verify_write_access(resource, current_user)
             
         if resource.type != ResourceType.FILE or not resource.s3_key:
             raise HTTPException(status_code=400, detail="Not a file")
@@ -206,33 +287,33 @@ class MetadataService:
         if target_folder.type != ResourceType.FOLDER:
             raise HTTPException(status_code=400, detail="Target must be a folder")
             
-        permission_service.verify_owner(target_folder, current_user)
+        await permission_service.verify_write_access(target_folder, current_user)
         
         # 2. Get resources to move
-        resources = await Resource.find(
+        resources_candidates = await Resource.find(
             {"_id": {"$in": resource_ids}},
-            Resource.owner_id == current_user.id,
             Resource.is_deleted != True
         ).to_list()
+        
+        resources = []
+        for res in resources_candidates:
+            if await permission_service.check_write_access(res, current_user):
+                resources.append(res)
         
         if not resources:
             return {"added": [], "updated": [], "deleted": []}
             
         # 3. Circular Dependency Check
-        # If we are moving a folder, we must ensure the target is NOT inside that folder.
-        # We can check if target_folder's ancestors include any of the resource_ids.
-        # This requires traversing up from target_folder until we hit root or one of the moving IDs.
-        
-        # Optimized check: tracing back up
         curr = target_folder
         while curr.parent_id:
-            if curr.id in resource_ids: # moving a folder into itself or its descendant
+            if curr.id in resource_ids: 
                 raise HTTPException(status_code=400, detail="Cannot move a folder into itself")
             
-            # Optimization: If we hit user root, stop?
+            # Stop if root of owner (heuristic) - but we might have cross-user trees now.
+            # Safe break:
             if curr.id == current_user.root_id:
                 break
-                
+            
             parent = await Resource.get(curr.parent_id)
             if not parent: 
                 break
@@ -249,6 +330,8 @@ class MetadataService:
                 res.updated_at = datetime.now()
                 await res.save()
                 updated_resources.append(res)
+        
+        await self._invalidate_tree_cache(current_user.id)
                 
         return {
             "added": [],
@@ -261,22 +344,49 @@ class MetadataService:
         target_folder = await Resource.get(target_parent_id)
         if not target_folder or target_folder.type != ResourceType.FOLDER:
              raise HTTPException(status_code=404, detail="Target folder not found")
-        permission_service.verify_owner(target_folder, current_user)
+        await permission_service.verify_write_access(target_folder, current_user)
         
         # 2. Get resources
-        sources = await Resource.find(
+        candidates = await Resource.find(
             {"_id": {"$in": resource_ids}},
-            Resource.owner_id == current_user.id,
             Resource.is_deleted != True
         ).to_list()
         
+        sources = []
+        for res in candidates:
+             if await permission_service.check_resource_access(res, current_user): # Copy only needs read access on source!
+                 sources.append(res)
+        
         added_resources = []
         
-        # 3. Recursive Copy Function
+        # 3a. Pre-calculate size for Quota Check (Recursive)
+        total_copy_size = 0
+        
+        async def calculate_size(res: Resource):
+            size = 0
+            if res.type == ResourceType.FILE:
+                size += res.size
+            elif res.type == ResourceType.FOLDER:
+                 children = await Resource.find(
+                    Resource.parent_id == res.id,
+                    Resource.is_deleted != True
+                 ).to_list()
+                 for child in children:
+                     size += await calculate_size(child)
+            return size
+
+        # Gather sum of all sources
+        for src in sources:
+            total_copy_size += await calculate_size(src)
+
+        if current_user.storage_used + total_copy_size > current_user.storage_limit:
+             raise HTTPException(status_code=403, detail="Storage quota exceeded. Upgrade your plan.")
+        
+        # 3b. Recursive Copy Function
         async def recursive_copy(original: Resource, new_parent_id: PydanticObjectId):
             # Create copy of the node
             new_node = Resource(
-                name=original.name, # logic to handle duplicates? e.g. "Copy of..."? For now keep same name.
+                name=original.name, 
                 type=original.type,
                 parent_id=new_parent_id,
                 owner_id=current_user.id,
@@ -301,9 +411,15 @@ class MetadataService:
         # 4. Execute Copy
         for src in sources:
             # Check if copying into itself (infinite loop risk if using naive logic, usually safe if we copy to new ID)
-            # Copying a folder into its own child is technically impossible since the child is inside it.
             # But copying a folder into itself (same parent) creates a duplicate sibling.
             await recursive_copy(src, target_parent_id)
+            
+        # Update Usage
+        if total_copy_size > 0:
+            current_user.storage_used += total_copy_size
+            await current_user.save()
+            
+        await self._invalidate_tree_cache(current_user.id)
             
         return {
             "added": added_resources,

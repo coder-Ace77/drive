@@ -11,6 +11,9 @@ class UserCreate(UserBase):
 class UserResponse(UserBase):
     id: PydanticObjectId
     root_id: Optional[PydanticObjectId]
+    plan: str
+    storage_used: int
+    storage_limit: int
 
     class Config:
         arbitrary_types_allowed = True

@@ -10,3 +10,4 @@ passlib[bcrypt]
 python-multipart
 boto3
 zipstream-ng
+redis

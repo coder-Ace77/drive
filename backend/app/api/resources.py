@@ -56,13 +56,30 @@ async def confirm_upload(
 ):
     return await upload_service.confirm_upload(confirm_in, current_user)
 
-@router.post("/resources/{resource_id}/share", response_model=dict)
+@router.post("/resources/{resource_id}/share", response_model=ResourceResponse)
 async def share_resource(
     resource_id: PydanticObjectId,
     share_in: dict, # { "username": "..." }
     current_user: User = Depends(get_current_user)
 ):
-    return await metadata_service.share_resource(resource_id, share_in.get("username"), current_user)
+    return await metadata_service.share_resource(
+        resource_id, 
+        share_in.get("username"), 
+        current_user,
+        permission_type=share_in.get("type", "read")
+    )
+
+@router.post("/resources/{resource_id}/unshare", response_model=ResourceResponse)
+async def unshare_resource(
+    resource_id: PydanticObjectId,
+    share_in: dict, # { "username": "..." }
+    current_user: User = Depends(get_current_user)
+):
+    return await metadata_service.unshare_resource(
+        resource_id, 
+        share_in.get("username"), 
+        current_user
+    )
 
 @router.get("/shared", response_model=List[ResourceResponse])
 async def get_shared_resources(

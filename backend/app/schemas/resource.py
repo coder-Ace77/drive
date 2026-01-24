@@ -37,11 +37,13 @@ class FileUploadInit(BaseModel):
     file_name: str
     file_type: str
     relative_path: Optional[str] = None
+    size: int = 0
 
 class FileInitItem(BaseModel):
     file_name: str
     file_type: str
     relative_path: Optional[str] = None
+    size: int = 0
 
 class BulkFileUploadInit(BaseModel):
     parent_id: PydanticObjectId

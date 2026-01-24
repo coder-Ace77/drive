@@ -37,5 +37,6 @@ class Resource(Document):
                 ("name", 1),
                 ("type", 1),
                 ("is_deleted", 1)
-            ]
+            ],
+            "shared_with.user_id"
         ]

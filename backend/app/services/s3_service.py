@@ -55,4 +55,22 @@ class S3Service:
     def get_object_stream(self, key: str):
         return self.client.get_object(Bucket=self.bucket, Key=key)['Body']
 
+    def head_object(self, key: str) -> dict:
+        return self.client.head_object(Bucket=self.bucket, Key=key)
+
+    def list_objects(self, prefix: str = "") -> list:
+        paginator = self.client.get_paginator('list_objects_v2')
+        pages = paginator.paginate(Bucket=self.bucket, Prefix=prefix)
+        
+        objects = []
+        for page in pages:
+            if 'Contents' in page:
+                for obj in page['Contents']:
+                    objects.append({
+                        'Key': obj['Key'],
+                        'LastModified': obj['LastModified'],
+                        'Size': obj['Size']
+                    })
+        return objects
+
 s3_service = S3Service()

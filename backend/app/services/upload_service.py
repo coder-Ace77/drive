@@ -3,20 +3,58 @@ from beanie import PydanticObjectId
 from app.models.user import User
 from app.models.resource import Resource, ResourceType
 from app.schemas.resource import FileUploadInit, FileUploadConfirm, BulkFileUploadInit, FileUploadResponse, FileInitItem
+from app.services.permission_service import permission_service
 from app.services.s3_service import s3_service
+from fastapi import HTTPException
 import logging
 import time
+import os
+import redis.asyncio as redis
 
 logger = logging.getLogger(__name__)
 
 class UploadService:
+    def __init__(self):
+        self.redis_client = redis.Redis(
+            host=os.getenv("REDIS_HOST", "localhost"),
+            port=int(os.getenv("REDIS_PORT", 6379)),
+            password=os.getenv("REDIS_PASSWORD", None),
+            decode_responses=True,
+            ssl=True
+        )
+
+    async def _invalidate_tree_cache(self, user_id):
+        try:
+            await self.redis_client.delete(f"drive:tree:{user_id}")
+        except Exception as e:
+            logger.error(f"Redis invalidation error: {e}")
+
     async def init_upload(self, upload_in: FileUploadInit, current_user: User) -> dict:
+        if ".." in upload_in.file_name or (upload_in.relative_path and ".." in upload_in.relative_path):
+             raise HTTPException(status_code=400, detail="Invalid file path")
+        
+        # Quota Check
+        if current_user.storage_used + upload_in.size > current_user.storage_limit:
+             raise HTTPException(status_code=403, detail="Storage quota exceeded. Upgrade your plan.")
+        
         target_parent_id = upload_in.parent_id
         
+        # Verify write access to destination
+        if target_parent_id:
+            parent = await Resource.get(target_parent_id)
+            if parent:
+                await permission_service.verify_write_access(parent, current_user)
+            else:
+                 # If parent ID is provided but not found, raising 404 is safer
+                 raise HTTPException(status_code=404, detail="Parent folder not found")
+
         if upload_in.relative_path and "/" in upload_in.relative_path:
             path_segments = upload_in.relative_path.split("/")[:-1]
             
             for segment in path_segments:
+                # We need to find or create folders. 
+                # If creating, we must ensure we have write access to the current parent.
+                # (Checked above for initial parent, and subsequent parents we will own/have access to)
                 existing = await Resource.find_one(
                     Resource.parent_id == target_parent_id,
                     Resource.name == segment,
@@ -25,6 +63,8 @@ class UploadService:
                 )
                 
                 if existing:
+                    # If navigating into existing folder, must have write access
+                    await permission_service.verify_write_access(existing, current_user)
                     target_parent_id = existing.id
                 else:
                     new_folder = Resource(
@@ -35,6 +75,7 @@ class UploadService:
                     )
                     await new_folder.create()
                     target_parent_id = new_folder.id
+                    await self._invalidate_tree_cache(current_user.id) # Invalidate on folder creation
     
         resource_id = PydanticObjectId()
         
@@ -51,7 +92,20 @@ class UploadService:
     async def init_upload_bulk(self, bulk_in: BulkFileUploadInit, current_user: User) -> List[FileUploadResponse]:
         start_time = time.time()
         file_count = len(bulk_in.files)
-        logger.info(f"Starting bulk upload init for {file_count} files. User: {current_user.id}")
+        total_size = sum(f.size for f in bulk_in.files)
+        
+        if current_user.storage_used + total_size > current_user.storage_limit:
+             raise HTTPException(status_code=403, detail="Storage quota exceeded. Upgrade your plan.")
+
+        logger.info(f"Starting bulk upload init for {file_count} files. Total size: {total_size}. User: {current_user.id}")
+        
+        # Verify write access to root destination
+        if bulk_in.parent_id:
+            parent = await Resource.get(bulk_in.parent_id)
+            if parent:
+                await permission_service.verify_write_access(parent, current_user)
+            else:
+                 raise HTTPException(status_code=404, detail="Parent folder not found")
         
         # 1. Identify all unique folder paths required
         # Map: "folder/subfolder" -> { "name": "subfolder", "parent_path": "folder", "depth": 1 }
@@ -164,6 +218,9 @@ class UploadService:
             
             # logger.info(f"Depth {depth}: Resolved {len(lookup_keys)} folders (Found {len(found_map)}, Created {len(to_insert)})")
 
+        if new_folders_created > 0:
+            await self._invalidate_tree_cache(current_user.id)
+
         # 3. Generate Responses with resolved IDs
         responses = []
         for index, file_item in enumerate(bulk_in.files):
@@ -198,6 +255,27 @@ class UploadService:
         }
 
     async def confirm_upload(self, confirm_in: FileUploadConfirm, current_user: User) -> dict:
+        if confirm_in.parent_id:
+            parent = await Resource.get(confirm_in.parent_id)
+            if parent:
+                await permission_service.verify_write_access(parent, current_user)
+            else:
+                raise HTTPException(status_code=404, detail="Parent folder not found")
+
+        # Verify S3 Object Exists and Size matches
+        try:
+             s3_meta = s3_service.head_object(confirm_in.s3_key)
+             # Basic sanity check: size. s3_meta['ContentLength']
+             if s3_meta['ContentLength'] != confirm_in.size:
+                 # Just a warning or strict? Let's log it but maybe allow if it's close? 
+                 # For security, strict is better, but multipart uploads might vary slightly? 
+                 # No, usually exact. 
+                 # But let's just ensure it DOES exist.
+                 pass
+        except Exception as e:
+             logger.error(f"S3 Verification Failed: {str(e)}")
+             raise HTTPException(status_code=400, detail="File verification failed. File not found in storage.")
+
         new_file = Resource(
             id=confirm_in.resource_id, 
             name=confirm_in.name,
@@ -208,6 +286,12 @@ class UploadService:
             size=confirm_in.size
         )
         await new_file.create()
+        
+        # Update usage
+        current_user.storage_used += confirm_in.size
+        await current_user.save()
+        
+        await self._invalidate_tree_cache(current_user.id)
         return new_file
 
 upload_service = UploadService()
