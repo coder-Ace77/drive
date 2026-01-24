@@ -47,7 +47,7 @@ const DrivePage = () => {
 
   const { selectedItems, toggleSelection, clearSelection, } = useDriveSelection(items);
   const { clipboard, copyItems, cutItems, pasteItems } = useDriveClipboard(refreshDrive, applyDelta);
-  const { resumableSession, uploadFiles, clearSession, isUploading, cancelUpload } = useDriveUpload(currentFolderId, applyDelta);
+  const { resumableSession, uploadFiles, clearSession, isUploading, cancelUpload, uploadSpeed } = useDriveUpload(currentFolderId, applyDelta);
 
   const { createFolder,
     deleteItem,
@@ -226,6 +226,7 @@ const DrivePage = () => {
             onResume={handleResume}
             onCancel={clearSession}
             isUploading={isUploading}
+            uploadSpeed={uploadSpeed}
           />
         )}
 

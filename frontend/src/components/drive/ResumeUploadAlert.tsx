@@ -10,9 +10,10 @@ interface ResumeUploadAlertProps {
     onResume: () => void;
     onCancel: () => void;
     isUploading?: boolean;
+    uploadSpeed?: string;
 }
 
-const ResumeUploadAlert: React.FC<ResumeUploadAlertProps> = ({ session, onResume, onCancel, isUploading = false }) => {
+const ResumeUploadAlert: React.FC<ResumeUploadAlertProps> = ({ session, onResume, onCancel, isUploading = false, uploadSpeed }) => {
     const uploadedCount = session.completedPaths.length;
     const totalCount = session.totalFiles;
     const percentage = Math.round((uploadedCount / totalCount) * 100);
@@ -60,8 +61,9 @@ const ResumeUploadAlert: React.FC<ResumeUploadAlertProps> = ({ session, onResume
                                 {percentage}%
                             </span>
                             {isUploading && (
-                                <span className={`${theme.subTextColor} text-xs ml-1`}>
-                                    ({uploadedCount} / {totalCount})
+                                <span className={`${theme.subTextColor} text-xs ml-1 flex items-center gap-2`}>
+                                    <span>({uploadedCount} / {totalCount})</span>
+                                    {uploadSpeed && <span className="font-mono text-xs opacity-75">• {uploadSpeed}</span>}
                                 </span>
                             )}
                         </div>

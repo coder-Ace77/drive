@@ -12,6 +12,9 @@ export interface DriveItem {
 export interface UserInfo {
   username: string;
   root_id: string;
+  plan: 'normal' | 'pro';
+  storage_used: number;
+  storage_limit: number;
 }
 
 export interface FileUploadResponse {

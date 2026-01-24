@@ -18,6 +18,7 @@ export const useDriveUpload = (
 ) => {
     const [resumableSession, setResumableSession] = useState<UploadSession | null>(null);
     const [isUploading, setIsUploading] = useState(false);
+    const [uploadSpeed, setUploadSpeed] = useState<string>("");
 
     const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -113,6 +114,12 @@ export const useDriveUpload = (
 
                 const batch = pendingFiles.slice(i, i + CONCURRENCY);
 
+                // Speed calculation state
+                let lastLoaded = 0;
+                let lastTime = Date.now();
+
+                const THROTTLE_MS = 800; // Update speed every 800ms
+
                 await Promise.all(batch.map(async (file, batchIndex) => {
                     const globalIndex = i + batchIndex;
                     const config = uploadConfigs[globalIndex];
@@ -121,7 +128,24 @@ export const useDriveUpload = (
                     try {
                         await axios.put(config.url, file, {
                             headers: { 'Content-Type': file.type || 'application/octet-stream' },
-                            signal: abortControllerRef.current?.signal
+                            signal: abortControllerRef.current?.signal,
+                            onUploadProgress: (progressEvent) => {
+                                const now = Date.now();
+                                if (now - lastTime >= THROTTLE_MS && progressEvent.loaded > 0) {
+                                    const timeDiff = (now - lastTime) / 1000; // seconds
+                                    const loadedDiff = progressEvent.loaded - lastLoaded;
+
+                                    if (timeDiff > 0) {
+                                        const speedBytesPerSec = loadedDiff / timeDiff;
+                                        const speedMBPerSec = (speedBytesPerSec / (1024 * 1024)).toFixed(1);
+                                        const newSpeed = `${speedMBPerSec} MB/s`;
+                                        setUploadSpeed(newSpeed);
+
+                                        lastLoaded = progressEvent.loaded;
+                                        lastTime = now;
+                                    }
+                                }
+                            }
                         });
 
                         const confirmRes = await driveService.uploadConfirm({
@@ -185,6 +209,7 @@ export const useDriveUpload = (
         uploadFiles,
         clearSession,
         isUploading,
-        cancelUpload
+        cancelUpload,
+        uploadSpeed
     };
 };

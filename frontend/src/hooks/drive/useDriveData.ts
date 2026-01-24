@@ -92,7 +92,18 @@ export const useDriveData = () => {
             }
         };
 
-        if (currentFolderId && !folderChildrenMap[currentFolderId] && currentFolderId !== user?.root_id && activeTab === 'drive') {
+        // Allow fetching if we have a folder ID, regardless of tab (unless it's root and we are in Drive, handled by Init)
+        // For shared tab, we start with specific list, but if we navigate into a folder, we need to fetch.
+        if (currentFolderId && !folderChildrenMap[currentFolderId]) {
+            // Avoid re-fetching root if already loaded via tree, but for shared folders we need to fetch
+            // logic: if it's the user's root, we might have it from Tree, but verifying doesn't hurt.
+            // Tree only gave structure, not full updated children list possibly? 
+            // actually `get_tree` gives all descendants.
+            // Optimization: if we are in Drive tab and it's root, we skipped.
+            // But simpler: just check map.
+            if (activeTab === 'drive' && currentFolderId === user?.root_id && folderChildrenMap[currentFolderId]) {
+                return;
+            }
             fetchFolderContents();
         }
     }, [currentFolderId, activeTab, user?.root_id, folderChildrenMap]);
@@ -110,16 +121,25 @@ export const useDriveData = () => {
     useEffect(() => {
         if (activeTab === 'shared') {
             fetchSharedItems();
+            // Ensure we reset current folder if switching to Shared tab, so we see the root list
+            // But if we are already in shared tab and navigating, we don't want to reset.
+            // This effect runs on activeTab change. 
+            // We should reset currentFolderId to null when entering Shared tab?
+            // "Shared" tab root doesn't have a folder ID usually, it's a virtual view.
+            if (activeTab === 'shared') {
+                setCurrentFolderId(null);
+            }
         } else {
             if (user?.root_id && !currentFolderId) {
                 setCurrentFolderId(user.root_id);
             }
         }
-    }, [activeTab, fetchSharedItems, user?.root_id, currentFolderId]);
+        // Only trigger on activeTab change mainly, or user load
+    }, [activeTab, fetchSharedItems, user?.root_id]);
 
 
     const applyDelta = useCallback((delta: { added: DriveItem[], updated: DriveItem[], deleted: string[] }) => {
-        // Similar logic as original hook
+        // ... existing applyDelta code ...
         setItemMap(prev => {
             const next = { ...prev };
             delta.deleted.forEach(id => delete next[id]);
@@ -159,22 +179,47 @@ export const useDriveData = () => {
     }, [currentFolderId, searchQuery]);
 
     const goBack = useCallback(() => {
-        if (folderHistory.length === 0 && user?.root_id) {
-            setCurrentFolderId(user.root_id);
+        // If history is empty:
+        // In Drive: go to root.
+        // In Shared: go to null (root of shared).
+        if (folderHistory.length === 0) {
+            if (activeTab === 'drive' && user?.root_id) {
+                setCurrentFolderId(user.root_id);
+            } else if (activeTab === 'shared') {
+                setCurrentFolderId(null);
+            }
             return;
         }
         const prevHistory = [...folderHistory];
         const lastId = prevHistory.pop();
         setFolderHistory(prevHistory);
-        if (lastId) setCurrentFolderId(lastId);
+
+        // If lastId is undefined/null, it implies we go back to start? 
+        // Logic: if we were at root, history is empty.
+        // If we navigated deep, history has ids.
+        if (lastId) {
+            setCurrentFolderId(lastId);
+        } else {
+            // Handle case where we might pop to "null" if we pushed null? 
+            // We don't push null.
+            // If we are in Shared and went 1 level deep. History has [null]? No, we only push currentFolderId if it exists.
+            // If we started at null (Shared Root), then navigated to A. current=A. history=[].
+            // Back -> history empty. Should go to null.
+            if (activeTab === 'shared') {
+                setCurrentFolderId(null);
+            } else if (user?.root_id) {
+                setCurrentFolderId(user.root_id);
+            }
+        }
         if (searchQuery) setSearchQuery("");
-    }, [folderHistory, user?.root_id, searchQuery]);
+    }, [folderHistory, user?.root_id, searchQuery, activeTab]);
 
 
     // Computed
     const currentItems = useMemo(() => {
         if (!currentFolderId) return [];
         const childIds = folderChildrenMap[currentFolderId] || [];
+        // Support items being in map but maybe not fully loaded? fetch ensures they are.
         return childIds.map(id => itemMap[id]).filter(Boolean);
     }, [currentFolderId, folderChildrenMap, itemMap]);
 
@@ -186,9 +231,17 @@ export const useDriveData = () => {
         );
     }, [searchQuery, itemMap]);
 
+    // Decide what items to show
+    let displayedItems: DriveItem[] = [];
+    if (searchQuery) {
+        displayedItems = searchResults || [];
+    } else if (activeTab === 'shared' && !currentFolderId) {
+        displayedItems = sharedItems;
+    } else {
+        displayedItems = currentItems;
+    }
+
     const getFolderSize = useCallback((folderId: string): number => {
-        // Logic for folder size
-        // This is recursive and might be expensive if map is huge, but kept same as before
         const childIds = folderChildrenMap[folderId] || [];
         let total = 0;
         for (const id of childIds) {
@@ -201,7 +254,7 @@ export const useDriveData = () => {
             }
         }
         return total;
-    }, [folderChildrenMap, itemMap]); // Note: Recursive function needs stable references or to be defined outside if possible, but inside hook relies on state.
+    }, [folderChildrenMap, itemMap]);
 
     return {
         user,
@@ -209,7 +262,7 @@ export const useDriveData = () => {
         currentFolderId,
         itemMap,
         folderChildrenMap,
-        items: activeTab === 'shared' ? sharedItems : (searchQuery ? (searchResults || []) : currentItems),
+        items: displayedItems,
         searchQuery,
         setSearchQuery,
         navigate,

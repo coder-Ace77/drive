@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Folder, FileText, Check } from 'lucide-react';
 import type { DriveItem } from '../types/index';
 import DriveItemMenu from './drive/DriveItemMenu';
@@ -12,6 +13,7 @@ interface Props {
   onShare: (item: DriveItem) => void;
   onCopy: (item: DriveItem) => void;
   onMove: (item: DriveItem) => void;
+  getFolderSize: (id: string) => number;
   isSharedView?: boolean;
   // Selection Props
   selectedItems?: Set<string>;
@@ -29,16 +31,20 @@ export const FileGrid = ({
   onShare,
   onCopy,
   onMove,
-  isSharedView = false,
+  getFolderSize,
   selectedItems,
   onToggleSelection,
   clipboard
 }: Props) => {
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 p-6 pb-24">
-      {items.map((item) => {
+      {items.map((item, index) => {
         const isSelected = selectedItems?.has(item.id);
         const isCut = clipboard?.mode === 'cut' && clipboard.items.includes(item.id);
+        const isMenuOpen = activeMenuId === item.id;
+        const size = item.type === 'file' ? (item.size || 0) : getFolderSize(item.id);
 
         return (
           <div
@@ -58,6 +64,7 @@ export const FileGrid = ({
                   ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-200'
                   : 'bg-white border-slate-100 hover:border-slate-300 hover:shadow-sm'}
               ${isCut ? 'opacity-50 grayscale border-dashed' : ''}
+              ${isMenuOpen ? 'z-50' : 'z-0'}
               `}
           >
             {/* Checkbox Overlay */}
@@ -76,19 +83,20 @@ export const FileGrid = ({
             )}
 
             {/* Menu Overlay */}
-            {!isSharedView && (
-              <div className="absolute top-2 right-2 z-10">
-                <DriveItemMenu
-                  item={item}
-                  onOpen={item.type === 'folder' ? onItemClick : undefined}
-                  onDownload={onDownload}
-                  onShare={onShare}
-                  onCopy={onCopy}
-                  onMove={onMove}
-                  onDelete={onDelete}
-                />
-              </div>
-            )}
+            <div className="absolute top-2 right-2 z-20">
+              <DriveItemMenu
+                item={item}
+                size={size}
+                onOpen={item.type === 'folder' ? onItemClick : undefined}
+                onDownload={onDownload}
+                onShare={onShare}
+                onCopy={onCopy}
+                onMove={onMove}
+                onDelete={onDelete}
+                isOpen={isMenuOpen}
+                onToggle={(open) => setActiveMenuId(open ? item.id : null)}
+              />
+            </div>
 
             <div className="flex flex-col items-center text-center mt-2">
               {item.type === 'folder' ? (

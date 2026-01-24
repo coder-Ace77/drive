@@ -68,6 +68,7 @@ const DriveMain: React.FC<DriveMainProps> = ({
                     selectedItems={selectedItems}
                     onToggleSelection={onToggleSelection}
                     clipboard={clipboard}
+                    getFolderSize={getFolderSize}
                 />
             ) : (
                 <ListView

@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { format } from 'date-fns';
 import { FileText, Folder, Check } from 'lucide-react';
 import type { DriveItem } from '../types';
 import DriveItemMenu from './drive/DriveItemMenu';
+import { formatSize } from '../utils/format';
 
 interface Props {
     items: DriveItem[];
@@ -21,14 +23,6 @@ interface Props {
     clipboard?: { mode: 'copy' | 'cut'; items: string[] } | null;
 }
 
-const formatSize = (bytes: number = 0) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-};
-
 export const ListView = ({
     items,
     selectedId,
@@ -40,11 +34,12 @@ export const ListView = ({
     onCopy,
     onMove,
     getFolderSize,
-    isSharedView = false,
     selectedItems,
     onToggleSelection,
     clipboard
 }: Props) => {
+    const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+
     return (
         <div className="flex flex-col">
             <div className="grid grid-cols-12 gap-4 px-4 md:px-6 py-3 border-b border-slate-100 text-sm font-medium text-slate-500 min-w-full sticky top-0 bg-white z-10">
@@ -58,10 +53,11 @@ export const ListView = ({
             </div>
 
             <div className="flex-1 overflow-y-auto pb-20">
-                {items.map((item) => {
+                {items.map((item, index) => {
                     const isSelected = selectedItems?.has(item.id);
                     const size = item.type === 'file' ? (item.size || 0) : getFolderSize(item.id);
                     const isCut = clipboard?.mode === 'cut' && clipboard.items.includes(item.id);
+                    const isMenuOpen = activeMenuId === item.id;
 
                     return (
                         <div
@@ -74,13 +70,14 @@ export const ListView = ({
                                 }
                             }}
                             onDoubleClick={() => onItemClick(item)}
-                            className={`grid grid-cols-12 gap-4 px-4 md:px-6 py-3 items-center border-b border-slate-50 transition-colors cursor-pointer group 
+                            className={`grid grid-cols-12 gap-4 px-4 md:px-6 py-3 items-center border-b border-slate-50 transition-colors cursor-pointer group relative
                                 ${isSelected
                                     ? 'bg-blue-50/60 hover:bg-blue-100/50'
                                     : selectedId === item.id
                                         ? 'bg-blue-50/30'
                                         : 'hover:bg-slate-50'}
                                 ${isCut ? 'opacity-50 grayscale text-slate-400' : ''}
+                                ${isMenuOpen ? 'z-20' : 'z-0'}
                                 `}
                         >
                             {/* Checkbox Column */}
@@ -120,18 +117,19 @@ export const ListView = ({
                             </div>
 
                             <div className="col-span-4 md:col-span-1 flex justify-end md:justify-center">
-                                {/* Shared View Limits Actions, so we might need to adjust DriveItemMenu or pass a flag, but for now we just show what's possible */}
-                                {!isSharedView && (
-                                    <DriveItemMenu
-                                        item={item}
-                                        onOpen={item.type === 'folder' ? onItemClick : undefined}
-                                        onDownload={onDownload}
-                                        onShare={onShare}
-                                        onCopy={onCopy}
-                                        onMove={onMove}
-                                        onDelete={onDelete}
-                                    />
-                                )}
+                                {/* Enabled actions for all views including shared */}
+                                <DriveItemMenu
+                                    item={item}
+                                    size={size}
+                                    onOpen={item.type === 'folder' ? onItemClick : undefined}
+                                    onDownload={onDownload}
+                                    onShare={onShare}
+                                    onCopy={onCopy}
+                                    onMove={onMove}
+                                    onDelete={onDelete}
+                                    isOpen={isMenuOpen}
+                                    onToggle={(open) => setActiveMenuId(open ? item.id : null)}
+                                />
                             </div>
                         </div>
                     );

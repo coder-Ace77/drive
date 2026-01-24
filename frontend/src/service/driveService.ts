@@ -14,8 +14,19 @@ export const driveService = {
         throw new Error("Failed to get view URL");
     },
 
-    shareResource: async (resourceId: string, username: string): Promise<void> => {
-        await api.post(`/resources/${resourceId}/share`, { username });
+    shareResource: async (resourceId: string, username: string, permissionType: "read" | "editor" = "read"): Promise<DriveItem> => {
+        const res = await api.post(`/resources/${resourceId}/share`, { username, type: permissionType });
+        return res.data;
+    },
+
+    unshareResource: async (resourceId: string, username: string): Promise<DriveItem> => {
+        const res = await api.post(`/resources/${resourceId}/unshare`, { username });
+        return res.data;
+    },
+
+    searchUsers: async (q: string): Promise<{ username: string; id: string }[]> => {
+        const res = await api.get(`/users/search?q=${encodeURIComponent(q)}`);
+        return res.data;
     },
 
     getMe: async (): Promise<UserInfo> => {

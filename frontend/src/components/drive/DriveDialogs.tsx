@@ -46,18 +46,36 @@ const DriveDialogs: React.FC<DriveDialogsProps> = ({
         e.preventDefault();
         const form = e.target as HTMLFormElement;
         const username = (form.elements.namedItem('username') as HTMLInputElement).value;
+        const permissionType = (form.elements.namedItem('permissionType') as HTMLSelectElement).value as "read" | "editor";
 
         if (!itemToShare || !username) return;
 
         const toastId = toast.loading("Sharing...");
         try {
-            await driveService.shareResource(itemToShare.id, username);
+            const updatedItem = await driveService.shareResource(itemToShare.id, username, permissionType);
             toast.dismiss(toastId);
             toast.success("Shared successfully");
-            setIsShareOpen(false);
-            setItemToShare(null);
+            // Do NOT close, update the item so list refreshes
+            setItemToShare(updatedItem);
+
+            // Clear input? Ref is hard without ref object. Simple hack: form reset
+            (e.target as HTMLFormElement).reset();
         } catch (err: any) {
             toast.error(err.response?.data?.detail || "Failed to share");
+            toast.dismiss(toastId);
+        }
+    };
+
+    const handleRemoveShare = async (username: string) => {
+        if (!itemToShare) return;
+        const toastId = toast.loading("Removing access...");
+        try {
+            const updatedItem = await driveService.unshareResource(itemToShare.id, username);
+            toast.dismiss(toastId);
+            toast.success("Access revoked");
+            setItemToShare(updatedItem);
+        } catch (err: any) {
+            toast.error(err.response?.data?.detail || "Failed to revoke access");
             toast.dismiss(toastId);
         }
     };
@@ -81,6 +99,7 @@ const DriveDialogs: React.FC<DriveDialogsProps> = ({
                     setItemToShare(null);
                 }}
                 onSubmit={handleSubmitShare}
+                onRemove={handleRemoveShare}
             />
 
             <ConfirmDialog

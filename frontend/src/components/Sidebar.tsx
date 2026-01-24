@@ -76,6 +76,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <Clock size={20} /> Shared with me
                     </button>
                 </nav>
+
+                <div className="mt-auto px-4 py-4 border-t border-slate-200">
+                    <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs font-medium text-slate-500">Storage</span>
+                        {user && <span className="text-xs font-medium text-slate-700">
+                            {(user.storage_used / (1024 * 1024)).toFixed(0)} MB / {(user.storage_limit / (1024 * 1024)).toFixed(0)} MB
+                        </span>}
+                    </div>
+                    {user && (
+                        <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                            <div
+                                className={`h-full rounded-full transition-all duration-500 ${(user.storage_used / user.storage_limit) > 0.9 ? 'bg-red-500' : 'bg-blue-600'
+                                    }`}
+                                style={{ width: `${Math.min(100, (user.storage_used / user.storage_limit) * 100)}%` }}
+                            />
+                        </div>
+                    )}
+                    <p className="text-[10px] text-slate-400 mt-2">
+                        {user?.plan === 'pro' ? 'Pro Plan (2GB)' : 'Free Plan (250MB)'}
+                    </p>
+                </div>
             </aside>
         </>
     );
