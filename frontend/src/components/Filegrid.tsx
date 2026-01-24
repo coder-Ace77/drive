@@ -1,5 +1,6 @@
-import { Folder, FileText, Download, Trash2, Share2, Check } from 'lucide-react';
+import { Folder, FileText, Check } from 'lucide-react';
 import type { DriveItem } from '../types/index';
+import DriveItemMenu from './drive/DriveItemMenu';
 
 interface Props {
   items: DriveItem[];
@@ -9,6 +10,8 @@ interface Props {
   onDownload: (item: DriveItem) => void;
   onDelete: (id: string) => void;
   onShare: (item: DriveItem) => void;
+  onCopy: (item: DriveItem) => void;
+  onMove: (item: DriveItem) => void;
   isSharedView?: boolean;
   // Selection Props
   selectedItems?: Set<string>;
@@ -24,13 +27,15 @@ export const FileGrid = ({
   onDownload,
   onDelete,
   onShare,
+  onCopy,
+  onMove,
   isSharedView = false,
   selectedItems,
   onToggleSelection,
   clipboard
 }: Props) => {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 p-6">
+    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 p-6 pb-24">
       {items.map((item) => {
         const isSelected = selectedItems?.has(item.id);
         const isCut = clipboard?.mode === 'cut' && clipboard.items.includes(item.id);
@@ -58,7 +63,7 @@ export const FileGrid = ({
             {/* Checkbox Overlay */}
             {onToggleSelection && (
               <div
-                className={`absolute top-3 left-3 z-10 ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}
+                className={`absolute top-3 left-3 z-10 ${isSelected ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'} transition-opacity`}
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleSelection(item.id);
@@ -70,37 +75,18 @@ export const FileGrid = ({
               </div>
             )}
 
-            {/* Action Overlay for Selected Item (Only show actions when hovering specifically if not in selection mode, or keep existing behavior?) 
-              Let's keep existing behavior for single selection actions for now, but maybe hide them if in multi-select mode?
-              Actually, let's keep them accessible.
-          */}
-            {selectedId === item.id && !isSelected && (
-              <div className="absolute top-2 right-2 flex gap-1 z-10">
-                {!isSharedView && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onShare(item); }}
-                    className="p-1 hover:bg-blue-100 rounded text-blue-600"
-                    title="Share"
-                  >
-                    <Share2 size={16} />
-                  </button>
-                )}
-                <button
-                  onClick={(e) => { e.stopPropagation(); onDownload(item); }}
-                  className="p-1 hover:bg-blue-100 rounded text-blue-600"
-                  title="Download"
-                >
-                  <Download size={16} />
-                </button>
-                {!isSharedView && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
-                    className="p-1 hover:bg-red-100 rounded text-red-600"
-                    title="Delete"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                )}
+            {/* Menu Overlay */}
+            {!isSharedView && (
+              <div className="absolute top-2 right-2 z-10">
+                <DriveItemMenu
+                  item={item}
+                  onOpen={item.type === 'folder' ? onItemClick : undefined}
+                  onDownload={onDownload}
+                  onShare={onShare}
+                  onCopy={onCopy}
+                  onMove={onMove}
+                  onDelete={onDelete}
+                />
               </div>
             )}
 

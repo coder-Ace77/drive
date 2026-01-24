@@ -1,6 +1,7 @@
 import { format } from 'date-fns';
-import { FileText, Folder, Download, Trash2, Share2, Check } from 'lucide-react';
+import { FileText, Folder, Check } from 'lucide-react';
 import type { DriveItem } from '../types';
+import DriveItemMenu from './drive/DriveItemMenu';
 
 interface Props {
     items: DriveItem[];
@@ -10,6 +11,8 @@ interface Props {
     onDownload: (item: DriveItem) => void;
     onDelete: (id: string) => void;
     onShare: (item: DriveItem) => void;
+    onCopy: (item: DriveItem) => void;
+    onMove: (item: DriveItem) => void;
     getFolderSize: (id: string) => number;
     isSharedView?: boolean;
     // Selection Props
@@ -33,8 +36,10 @@ export const ListView = ({
     onItemClick,
     onDownload,
     onDelete,
-    getFolderSize,
     onShare,
+    onCopy,
+    onMove,
+    getFolderSize,
     isSharedView = false,
     selectedItems,
     onToggleSelection,
@@ -42,17 +47,17 @@ export const ListView = ({
 }: Props) => {
     return (
         <div className="flex flex-col">
-            <div className="grid grid-cols-12 gap-4 px-4 md:px-6 py-3 border-b border-slate-100 text-sm font-medium text-slate-500 min-w-full">
+            <div className="grid grid-cols-12 gap-4 px-4 md:px-6 py-3 border-b border-slate-100 text-sm font-medium text-slate-500 min-w-full sticky top-0 bg-white z-10">
                 {/* Checkbox Header Placeholder */}
                 <div className="w-10"></div>
 
-                <div className="col-span-8 md:col-span-6 -ml-10">Name</div>
+                <div className="col-span-7 md:col-span-5">Name</div>
                 <div className="hidden md:block md:col-span-2">Size</div>
                 <div className="hidden md:block md:col-span-3">Last Modified</div>
-                <div className="col-span-4 md:col-span-1 text-center">Actions</div>
+                <div className="col-span-4 md:col-span-1 text-right md:text-center pr-2 md:pr-0">Actions</div>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto pb-20">
                 {items.map((item) => {
                     const isSelected = selectedItems?.has(item.id);
                     const size = item.type === 'file' ? (item.size || 0) : getFolderSize(item.id);
@@ -89,13 +94,13 @@ export const ListView = ({
                                 <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors 
                                     ${isSelected
                                         ? 'bg-blue-600 border-blue-600'
-                                        : 'bg-white border-slate-300 opacity-0 group-hover:opacity-100'
+                                        : 'bg-white border-slate-300 opacity-60 group-hover:opacity-100'
                                     }`}>
                                     {isSelected && <Check size={14} className="text-white" />}
                                 </div>
                             </div>
 
-                            <div className="col-span-8 md:col-span-6 -ml-10 flex items-center gap-3 overflow-hidden">
+                            <div className="col-span-7 md:col-span-5 flex items-center gap-3 overflow-hidden">
                                 {item.type === 'folder' ? (
                                     <Folder className="text-blue-500 fill-blue-500/20 flex-shrink-0" size={20} />
                                 ) : (
@@ -114,33 +119,18 @@ export const ListView = ({
                                 {item.updated_at ? format(new Date(item.updated_at), 'MMM d, yyyy') : '-'}
                             </div>
 
-                            <div className="col-span-4 md:col-span-1 flex justify-end md:justify-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                                {!isSharedView && !isSelected && (
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); onShare(item); }}
-                                        className="p-1.5 hover:bg-blue-100 rounded text-blue-600 transition-colors"
-                                        title="Share"
-                                    >
-                                        <Share2 size={16} />
-                                    </button>
-                                )}
-                                {!isSelected && (
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); onDownload(item); }}
-                                        className="p-1.5 hover:bg-blue-100 rounded text-blue-600 transition-colors"
-                                        title="Download"
-                                    >
-                                        <Download size={16} />
-                                    </button>
-                                )}
-                                {!isSharedView && !isSelected && (
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
-                                        className="p-1.5 hover:bg-red-100 rounded text-red-600 transition-colors"
-                                        title="Delete"
-                                    >
-                                        <Trash2 size={16} />
-                                    </button>
+                            <div className="col-span-4 md:col-span-1 flex justify-end md:justify-center">
+                                {/* Shared View Limits Actions, so we might need to adjust DriveItemMenu or pass a flag, but for now we just show what's possible */}
+                                {!isSharedView && (
+                                    <DriveItemMenu
+                                        item={item}
+                                        onOpen={item.type === 'folder' ? onItemClick : undefined}
+                                        onDownload={onDownload}
+                                        onShare={onShare}
+                                        onCopy={onCopy}
+                                        onMove={onMove}
+                                        onDelete={onDelete}
+                                    />
                                 )}
                             </div>
                         </div>

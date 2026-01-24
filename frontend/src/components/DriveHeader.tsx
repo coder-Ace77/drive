@@ -19,6 +19,8 @@ interface Props {
   onMenuClick: () => void;
   isUploading?: boolean;
   onCancelUpload?: () => void;
+  clipboard?: { mode: 'copy' | 'cut'; items: string[] } | null;
+  onPaste?: () => void;
 }
 
 export const DriveHeader = ({
@@ -34,7 +36,9 @@ export const DriveHeader = ({
   onViewModeChange,
   onMenuClick,
   isUploading = false,
-  onCancelUpload
+  onCancelUpload,
+  clipboard,
+  onPaste
 }: Props) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -116,6 +120,15 @@ export const DriveHeader = ({
               <LogOut size={20} className="rotate-180" />
               <span className="hidden sm:inline">Stop Upload</span>
             </button>
+          ) : clipboard && clipboard.items.length > 0 && onPaste ? (
+            <button
+              onClick={onPaste}
+              className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-full font-medium transition shadow-md active:scale-95 
+                ${clipboard.mode === 'cut' ? 'bg-orange-600 hover:bg-orange-700 shadow-orange-100 text-white' : 'bg-green-600 hover:bg-green-700 shadow-green-100 text-white'}`}
+            >
+              <FileUp size={20} />
+              <span className="hidden sm:inline">Paste {clipboard.items.length} Item{clipboard.items.length > 1 ? 's' : ''}</span>
+            </button>
           ) : (
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -127,7 +140,7 @@ export const DriveHeader = ({
             </button>
           )}
 
-          {isMenuOpen && (
+          {isMenuOpen && !clipboard?.items.length && (
             <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-xl py-2 z-50 animate-in fade-in zoom-in duration-100">
               <button onClick={() => { onUploadFile(); setIsMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-slate-700 hover:bg-slate-50">
                 <FileUp size={18} className="text-slate-400" />

@@ -13,10 +13,12 @@ interface DriveMainProps {
     onDownload: (item: DriveItem) => void;
     onDelete: (id: string) => void;
     onShare: (item: DriveItem) => void;
+    onCopy: (item: DriveItem) => void;
+    onMove: (item: DriveItem) => void;
     isSharedView: boolean;
     selectedItems: Set<string>;
     onToggleSelection: (id: string) => void;
-    clipboard: any;
+    clipboard: { mode: 'copy' | 'cut'; items: string[] } | null;
     getFolderSize: (id: string) => number;
     isSearching: boolean;
 }
@@ -30,6 +32,8 @@ const DriveMain: React.FC<DriveMainProps> = ({
     onDownload,
     onDelete,
     onShare,
+    onCopy,
+    onMove,
     isSharedView,
     selectedItems,
     onToggleSelection,
@@ -37,6 +41,10 @@ const DriveMain: React.FC<DriveMainProps> = ({
     getFolderSize,
     isSearching
 }) => {
+    if (items.length === 0) {
+        return <DriveEmptyState isSearching={isSearching} />;
+    }
+
     return (
         <main className="flex-1 overflow-y-auto bg-white relative">
             {isSearching && (
@@ -54,6 +62,8 @@ const DriveMain: React.FC<DriveMainProps> = ({
                     onDownload={onDownload}
                     onDelete={onDelete}
                     onShare={onShare}
+                    onCopy={onCopy}
+                    onMove={onMove}
                     isSharedView={isSharedView}
                     selectedItems={selectedItems}
                     onToggleSelection={onToggleSelection}
@@ -69,6 +79,8 @@ const DriveMain: React.FC<DriveMainProps> = ({
                     onDelete={onDelete}
                     getFolderSize={getFolderSize}
                     onShare={onShare}
+                    onCopy={onCopy}
+                    onMove={onMove}
                     isSharedView={isSharedView}
                     selectedItems={selectedItems}
                     onToggleSelection={onToggleSelection}

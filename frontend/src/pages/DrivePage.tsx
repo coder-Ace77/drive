@@ -243,6 +243,8 @@ const DrivePage = () => {
           onMenuClick={() => setIsSidebarOpen(true)}
           isUploading={isUploading}
           onCancelUpload={cancelUpload}
+          clipboard={clipboard}
+          onPaste={() => currentFolderId && pasteItems && pasteItems(currentFolderId)}
         />
 
         <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
@@ -266,6 +268,8 @@ const DrivePage = () => {
           onDownload={handleDownload}
           onDelete={handleDelete}
           onShare={handleShare}
+          onCopy={(item) => copyItems && copyItems([item.id])}
+          onMove={(item) => cutItems && cutItems([item.id])}
           isSharedView={activeTab === 'shared'}
           selectedItems={selectedItems}
           onToggleSelection={toggleSelection}
