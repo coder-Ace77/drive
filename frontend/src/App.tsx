@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import AuthPage from './pages/AuthPage';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 import DrivePage from './pages/DrivePage';
 import EditorPage from './pages/EditorPage';
 
@@ -7,10 +8,12 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/drive" element={<DrivePage />} />
-        <Route path="/editor/:id" element={<EditorPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route path="/drive" element={<DrivePage />} />
+          <Route path="/editor/:id" element={<EditorPage />} />
+        </Route>
         <Route path="/auth" element={<AuthPage />} />
-        <Route path="/" element={<Navigate to="/auth" />} />
+        <Route path="/" element={<Navigate to="/drive" replace />} />
       </Routes>
     </Router>
   );

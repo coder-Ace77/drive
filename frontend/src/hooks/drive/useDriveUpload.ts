@@ -22,6 +22,10 @@ export const useDriveUpload = (
 
     const abortControllerRef = useRef<AbortController | null>(null);
 
+    // Dynamic concurrency state
+    const concurrencyRef = useRef(3);
+    const activeUploadsRef = useRef(0);
+
     // Load session on mount
     useEffect(() => {
         const saved = localStorage.getItem('upload_session');
@@ -68,6 +72,9 @@ export const useDriveUpload = (
         }
 
         setIsUploading(true);
+        concurrencyRef.current = 3; // Reset start concurrency
+        activeUploadsRef.current = 0;
+
         const toastId = toast.loading(isResume ? `Resuming upload...` : `Preparing upload...`);
 
         try {
@@ -105,96 +112,124 @@ export const useDriveUpload = (
             // Dimiss the loading toast so we don't have overlays. Use the UI bar for progress.
             toast.dismiss(toastId);
 
-            const CONCURRENCY = 5;
-            for (let i = 0; i < pendingFiles.length; i += CONCURRENCY) {
-                // Check cancellation before batch
-                if (abortControllerRef.current?.signal.aborted) {
-                    throw new Error('Upload cancelled');
-                }
+            // Queue Setup
+            const queue = pendingFiles.map((file, i) => ({
+                file,
+                config: uploadConfigs[i],
+                path: file.webkitRelativePath || file.name
+            }));
 
-                const batch = pendingFiles.slice(i, i + CONCURRENCY);
+            let lastLoaded = 0;
+            let lastTime = Date.now();
+            const THROTTLE_MS = 800;
 
-                // Speed calculation state
-                let lastLoaded = 0;
-                let lastTime = Date.now();
+            const processQueue = async () => {
+                if (abortControllerRef.current?.signal.aborted) return;
 
-                const THROTTLE_MS = 800; // Update speed every 800ms
+                // Spawn workers until limit reached or queue empty
+                while (
+                    queue.length > 0 &&
+                    activeUploadsRef.current < concurrencyRef.current &&
+                    !abortControllerRef.current?.signal.aborted
+                ) {
+                    const item = queue.shift();
+                    if (!item) break;
 
-                await Promise.all(batch.map(async (file, batchIndex) => {
-                    const globalIndex = i + batchIndex;
-                    const config = uploadConfigs[globalIndex];
-                    const path = file.webkitRelativePath || file.name;
+                    activeUploadsRef.current++;
 
-                    try {
-                        await axios.put(config.url, file, {
-                            headers: { 'Content-Type': file.type || 'application/octet-stream' },
-                            signal: abortControllerRef.current?.signal,
-                            onUploadProgress: (progressEvent) => {
-                                const now = Date.now();
-                                if (now - lastTime >= THROTTLE_MS && progressEvent.loaded > 0) {
-                                    const timeDiff = (now - lastTime) / 1000; // seconds
-                                    const loadedDiff = progressEvent.loaded - lastLoaded;
-
-                                    if (timeDiff > 0) {
-                                        const speedBytesPerSec = loadedDiff / timeDiff;
-                                        const speedMBPerSec = (speedBytesPerSec / (1024 * 1024)).toFixed(1);
-                                        const newSpeed = `${speedMBPerSec} MB/s`;
-                                        setUploadSpeed(newSpeed);
-
-                                        lastLoaded = progressEvent.loaded;
-                                        lastTime = now;
+                    // Upload Item Function
+                    const uploadItem = async () => {
+                        try {
+                            const startTime = Date.now();
+                            await axios.put(item.config.url, item.file, {
+                                headers: { 'Content-Type': item.file.type || 'application/octet-stream' },
+                                signal: abortControllerRef.current?.signal,
+                                onUploadProgress: (progressEvent) => {
+                                    const now = Date.now();
+                                    if (now - lastTime >= THROTTLE_MS && progressEvent.loaded > 0) {
+                                        const timeDiff = (now - lastTime) / 1000;
+                                        const loadedDiff = progressEvent.loaded - lastLoaded;
+                                        if (timeDiff > 0) {
+                                            const speedBytesPerSec = loadedDiff / timeDiff;
+                                            const speedMBPerSec = (speedBytesPerSec / (1024 * 1024)).toFixed(1);
+                                            // Optional: Show Active Concurrency in UI for debug/fun? 
+                                            // setUploadSpeed(`${speedMBPerSec} MB/s (C:${concurrencyRef.current})`);
+                                            setUploadSpeed(`${speedMBPerSec} MB/s`);
+                                            lastLoaded = progressEvent.loaded;
+                                            lastTime = now;
+                                        }
                                     }
                                 }
+                            });
+
+                            const confirmRes = await driveService.uploadConfirm({
+                                resource_id: item.config.resource_id,
+                                parent_id: item.config.actual_parent_id,
+                                name: item.file.name,
+                                size: item.file.size,
+                                s3_key: item.config.s3_key,
+                                relative_path: item.path
+                            });
+
+                            applyDelta({
+                                added: [confirmRes],
+                                updated: [],
+                                deleted: []
+                            });
+
+                            session!.completedPaths.push(item.path);
+                            localStorage.setItem('upload_session', JSON.stringify(session));
+                            setResumableSession({ ...session! });
+
+                            // Success - Ramp Up
+                            // Limit max concurrency to 10 for browser sanity
+                            if (concurrencyRef.current < 10) {
+                                concurrencyRef.current += 1;
                             }
-                        });
 
-                        const confirmRes = await driveService.uploadConfirm({
-                            resource_id: config.resource_id,
-                            parent_id: config.actual_parent_id,
-                            name: file.name,
-                            size: file.size,
-                            s3_key: config.s3_key,
-                            relative_path: path
-                        });
+                        } catch (err) {
+                            if (axios.isCancel(err)) throw err;
+                            console.error(`Failed to upload ${item.file.name}`, err);
+                            toast.error(`Error uploading ${item.file.name}`);
 
-                        applyDelta({
-                            added: [confirmRes],
-                            updated: [],
-                            deleted: []
-                        });
-
-                        session!.completedPaths.push(path);
-
-                    } catch (err) {
-                        if (axios.isCancel(err)) {
-                            throw err;
+                            // Failure - Ramp Down
+                            concurrencyRef.current = Math.max(1, Math.floor(concurrencyRef.current / 2));
+                        } finally {
+                            activeUploadsRef.current--;
+                            processQueue(); // Trigger next
                         }
-                        console.error(`Failed to upload ${file.name}`, err);
-                        // Optional: Keep error toasts as they are important
-                        toast.error(`Error uploading ${file.name}.`);
+                    };
+
+                    // Start the upload without awaiting it here (fire and forget / independent promise)
+                    uploadItem().catch(err => {
+                        if (axios.isCancel(err) || (err as Error).message === 'Upload cancelled') {
+                            // Handled globally
+                        }
+                    });
+                }
+
+                // Completion Check
+                // We are done if queue is empty AND no active uploads
+                if (queue.length === 0 && activeUploadsRef.current === 0) {
+                    if (!abortControllerRef.current?.signal.aborted) {
+                        localStorage.removeItem('upload_session');
+                        setResumableSession(null);
+                        setIsUploading(false);
+                        toast.success("Upload complete!");
                     }
-                }));
+                }
+            };
 
-                localStorage.setItem('upload_session', JSON.stringify(session));
-                setResumableSession({ ...session! });
-            }
-
-            localStorage.removeItem('upload_session');
-            setResumableSession(null);
-            toast.success("Upload complete!");
+            // Kickoff
+            processQueue();
 
         } catch (err) {
             if (axios.isCancel(err) || (err as Error).message === 'Upload cancelled') {
                 console.log("Upload was cancelled");
-                // Toast handled in cancelUpload or not needed
             } else {
                 console.error("Bulk upload failed", err);
                 toast.error("Upload failed", { id: toastId });
-            }
-        } finally {
-            if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
                 setIsUploading(false);
-                abortControllerRef.current = null;
             }
         }
     };
