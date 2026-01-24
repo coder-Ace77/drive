@@ -140,7 +140,6 @@ export const useDriveUpload = (
                     // Upload Item Function
                     const uploadItem = async () => {
                         try {
-                            const startTime = Date.now();
                             await axios.put(item.config.url, item.file, {
                                 headers: { 'Content-Type': item.file.type || 'application/octet-stream' },
                                 signal: abortControllerRef.current?.signal,
