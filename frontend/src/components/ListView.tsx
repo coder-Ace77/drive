@@ -53,7 +53,7 @@ export const ListView = ({
             </div>
 
             <div className="flex-1 overflow-y-auto pb-20">
-                {items.map((item, index) => {
+                {items.map((item) => {
                     const isSelected = selectedItems?.has(item.id);
                     const size = item.type === 'file' ? (item.size || 0) : getFolderSize(item.id);
                     const isCut = clipboard?.mode === 'cut' && clipboard.items.includes(item.id);

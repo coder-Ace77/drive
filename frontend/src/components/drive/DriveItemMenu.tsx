@@ -67,9 +67,7 @@ const DriveItemMenu = ({
                 if (!buttonRect) return;
 
                 const MENU_WIDTH = 224; // w-56 = 14rem = 224px
-                const MENU_HEIGHT_ESTIMATE = 320; // estimate max height
 
-                let top = buttonRect.bottom + 4;
                 let left = buttonRect.right - MENU_WIDTH;
 
                 // Check if menu goes off screen vertically

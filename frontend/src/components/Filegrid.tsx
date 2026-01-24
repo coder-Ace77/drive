@@ -40,7 +40,7 @@ export const FileGrid = ({
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 p-6 pb-24">
-      {items.map((item, index) => {
+      {items.map((item) => {
         const isSelected = selectedItems?.has(item.id);
         const isCut = clipboard?.mode === 'cut' && clipboard.items.includes(item.id);
         const isMenuOpen = activeMenuId === item.id;
