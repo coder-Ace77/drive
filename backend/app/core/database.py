@@ -9,7 +9,6 @@ settings = get_settings()
 import dns.resolver
 
 async def init_db():
-    # Patch DNS resolver to use Google DNS to avoid system timeout issues
     dns.resolver.default_resolver = dns.resolver.Resolver(configure=False)
     dns.resolver.default_resolver.nameservers = ['8.8.8.8']
     

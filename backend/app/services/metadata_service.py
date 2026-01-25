@@ -64,7 +64,6 @@ class MetadataService:
     async def get_tree(self, current_user: User) -> dict:
         start_time = time.time()
         
-        # Check Cache
         cache_key = f"drive:tree:{current_user.id}"
         try:
             cached_tree = await self.redis_client.get(cache_key)
@@ -101,7 +100,6 @@ class MetadataService:
         root = results[0]
         descendants = root.get("descendants", [])
         
-        # Filter root just in case, though usually root shouldn't be deleted
         if root.get("is_deleted") is True:
             return {"tree": []}
 
@@ -109,7 +107,6 @@ class MetadataService:
         
         clean_nodes = []
         for node in tree_nodes:
-            # Skip if explicitly deleted (double check for safety)
             if node.get("is_deleted") is True:
                 continue
 
@@ -124,14 +121,21 @@ class MetadataService:
                        node["shared_with"][i]["user_id"] = str(perm["user_id"])
     
             if "descendants" in node: del node["descendants"]
-            clean_nodes.append(node)   
+
+            if node.get("created_at") and isinstance(node["created_at"], datetime):
+                node["created_at"] = node["created_at"].isoformat()
+            if node.get("updated_at") and isinstance(node["updated_at"], datetime):
+                node["updated_at"] = node["updated_at"].isoformat()
+            if node.get("deleted_at") and isinstance(node["deleted_at"], datetime):
+                node["deleted_at"] = node["deleted_at"].isoformat()
+                
+            clean_nodes.append(node)
 
         duration = time.time() - start_time
         logger.info(f"Tree fetch completed in {duration:.4f}s. Nodes: {len(clean_nodes)}")
         
         result = {"tree": clean_nodes}
         
-        # Set Cache (5 minutes)
         try:
              await self.redis_client.setex(cache_key, 300, json.dumps(result))
         except Exception as e:
@@ -156,10 +160,9 @@ class MetadataService:
         if permission_type not in ["read", "editor"]:
             raise HTTPException(status_code=400, detail="Invalid permission type. Must be 'read' or 'editor'")
         
-        # Check if already shared
         existing = next((p for p in resource.shared_with if p.user_id == user_to_share.id), None)
         if existing:
-            existing.type = permission_type # Update permission
+            existing.type = permission_type
         else:
             resource.shared_with.append(Permission(
                 user_id=user_to_share.id, 
@@ -179,12 +182,6 @@ class MetadataService:
         
         user_to_unshare = await User.find_one(User.username == username)
         
-        # Atomic pull but we need the updated document to return. 
-        # Beanie's updates doesn't return the new doc easily unless we re-fetch or use find_one_and_update
-        # Let's use re-fetch approach for simplicity or Python list manipulation + save if race condition isn't huge concern.
-        # Given "concurrent scenarios", allow atomic update is better.
-        # But we need to return it.
-        
         if user_to_unshare:
              await Resource.find({"_id": resource_id}).update(
                  {"$pull": {"shared_with": {"user_id": user_to_unshare.id}}}
@@ -194,7 +191,6 @@ class MetadataService:
                  {"$pull": {"shared_with": {"username": username}}}
              )
         
-        # Re-fetch to return
         updated_resource = await Resource.get(resource_id)
         return updated_resource
 
@@ -226,7 +222,6 @@ class MetadataService:
         }
 
     async def delete_resources_bulk(self, resource_ids: List[PydanticObjectId], current_user: User) -> dict:
-        # Fetch valid resources first
         to_delete_candidates = await Resource.find(
             {"_id": {"$in": resource_ids}},
             Resource.is_deleted != True
@@ -234,9 +229,7 @@ class MetadataService:
         
         real_ids = []
         for res in to_delete_candidates:
-            # Check permission for each
             try:
-                # We check access silently, skip if no access
                 if await permission_service.check_write_access(res, current_user):
                     real_ids.append(res.id)
             except:
@@ -245,7 +238,6 @@ class MetadataService:
         if not real_ids:
             return {"message": "No valid resources to delete", "deleted_count": 0}
             
-        # 2. Bulk Update
         await Resource.find(
             {"_id": {"$in": real_ids}}
         ).update(
@@ -279,7 +271,6 @@ class MetadataService:
         return {"message": "Saved"}
 
     async def move_resources(self, resource_ids: List[PydanticObjectId], target_parent_id: PydanticObjectId, current_user: User) -> dict:
-        # 1. Verify target folder
         target_folder = await Resource.get(target_parent_id)
         if not target_folder:
             raise HTTPException(status_code=404, detail="Target folder not found")
@@ -289,7 +280,6 @@ class MetadataService:
             
         await permission_service.verify_write_access(target_folder, current_user)
         
-        # 2. Get resources to move
         resources_candidates = await Resource.find(
             {"_id": {"$in": resource_ids}},
             Resource.is_deleted != True
@@ -303,14 +293,11 @@ class MetadataService:
         if not resources:
             return {"added": [], "updated": [], "deleted": []}
             
-        # 3. Circular Dependency Check
         curr = target_folder
         while curr.parent_id:
             if curr.id in resource_ids: 
                 raise HTTPException(status_code=400, detail="Cannot move a folder into itself")
             
-            # Stop if root of owner (heuristic) - but we might have cross-user trees now.
-            # Safe break:
             if curr.id == current_user.root_id:
                 break
             
@@ -319,7 +306,6 @@ class MetadataService:
                 break
             curr = parent
             
-        # 4. Update Parent IDs
         updated_resources = []
         for res in resources:
             if res.id == target_parent_id:
@@ -340,13 +326,10 @@ class MetadataService:
         }
 
     async def copy_resources(self, resource_ids: List[PydanticObjectId], target_parent_id: PydanticObjectId, current_user: User) -> dict:
-        # 1. Verify target
         target_folder = await Resource.get(target_parent_id)
         if not target_folder or target_folder.type != ResourceType.FOLDER:
              raise HTTPException(status_code=404, detail="Target folder not found")
         await permission_service.verify_write_access(target_folder, current_user)
-        
-        # 2. Get resources
         candidates = await Resource.find(
             {"_id": {"$in": resource_ids}},
             Resource.is_deleted != True
@@ -359,7 +342,6 @@ class MetadataService:
         
         added_resources = []
         
-        # 3a. Pre-calculate size for Quota Check (Recursive)
         total_copy_size = 0
         
         async def calculate_size(res: Resource):
@@ -375,16 +357,13 @@ class MetadataService:
                      size += await calculate_size(child)
             return size
 
-        # Gather sum of all sources
         for src in sources:
             total_copy_size += await calculate_size(src)
 
         if current_user.storage_used + total_copy_size > current_user.storage_limit:
              raise HTTPException(status_code=403, detail="Storage quota exceeded. Upgrade your plan.")
         
-        # 3b. Recursive Copy Function
         async def recursive_copy(original: Resource, new_parent_id: PydanticObjectId):
-            # Create copy of the node
             new_node = Resource(
                 name=original.name, 
                 type=original.type,
@@ -399,7 +378,6 @@ class MetadataService:
             added_resources.append(new_node)
             
             if original.type == ResourceType.FOLDER:
-                # Find children
                 children = await Resource.find(
                     Resource.parent_id == original.id,
                     Resource.is_deleted != True
@@ -408,13 +386,9 @@ class MetadataService:
                 for child in children:
                     await recursive_copy(child, new_node.id)
 
-        # 4. Execute Copy
         for src in sources:
-            # Check if copying into itself (infinite loop risk if using naive logic, usually safe if we copy to new ID)
-            # But copying a folder into itself (same parent) creates a duplicate sibling.
             await recursive_copy(src, target_parent_id)
             
-        # Update Usage
         if total_copy_size > 0:
             current_user.storage_used += total_copy_size
             await current_user.save()

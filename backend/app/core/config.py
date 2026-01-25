@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     secret_key: str
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440
+    allowed_origin: str = "*"
 
     redis_host: str = "localhost"
     redis_port: int = 6379

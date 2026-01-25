@@ -17,7 +17,7 @@ class Resource(Base):
     __tablename__ = "resources"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String)
-    type = Column(String) # 'file' or 'folder'
+    type = Column(String)
     s3_key = Column(String, nullable=True)
     owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
 
@@ -31,4 +31,4 @@ class Permission(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     resource_id = Column(UUID(as_uuid=True), ForeignKey("resources.id"))
-    mode = Column(String) # e.g., 'rwx'
+    mode = Column(String)

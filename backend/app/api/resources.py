@@ -72,7 +72,7 @@ async def share_resource(
 @router.post("/resources/{resource_id}/unshare", response_model=ResourceResponse)
 async def unshare_resource(
     resource_id: PydanticObjectId,
-    share_in: dict, # { "username": "..." }
+    share_in: dict,
     current_user: User = Depends(get_current_user)
 ):
     return await metadata_service.unshare_resource(
@@ -141,7 +141,7 @@ async def move_resources(
 
 @router.post("/resources/copy", response_model=TreeDelta)
 async def copy_resources(
-    copy_in: ResourceMoveRequest, # We can reuse the schema as it has ids and target
+    copy_in: ResourceMoveRequest,
     current_user: User = Depends(get_current_user)
 ):
     return await metadata_service.copy_resources(copy_in.resource_ids, copy_in.target_parent_id, current_user)
@@ -150,5 +150,4 @@ async def copy_resources(
 async def trigger_cleanup(
     current_user: User = Depends(get_current_user)
 ):
-    # In a real app, restrict this to admin users
     return await cleanup_service.cleanup_deleted_resources()

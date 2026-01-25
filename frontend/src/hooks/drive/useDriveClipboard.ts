@@ -11,8 +11,6 @@ interface ClipboardState {
 }
 
 export const useDriveClipboard = (
-    // refreshDrive is currently unused but might be needed later for shared folders?
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _refreshDrive: () => Promise<void>,
     applyDelta: (delta: any) => void
 ) => {

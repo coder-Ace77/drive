@@ -33,28 +33,22 @@ class UploadService:
         if ".." in upload_in.file_name or (upload_in.relative_path and ".." in upload_in.relative_path):
              raise HTTPException(status_code=400, detail="Invalid file path")
         
-        # Quota Check
         if current_user.storage_used + upload_in.size > current_user.storage_limit:
              raise HTTPException(status_code=403, detail="Storage quota exceeded. Upgrade your plan.")
         
         target_parent_id = upload_in.parent_id
         
-        # Verify write access to destination
         if target_parent_id:
             parent = await Resource.get(target_parent_id)
             if parent:
                 await permission_service.verify_write_access(parent, current_user)
             else:
-                 # If parent ID is provided but not found, raising 404 is safer
                  raise HTTPException(status_code=404, detail="Parent folder not found")
 
         if upload_in.relative_path and "/" in upload_in.relative_path:
             path_segments = upload_in.relative_path.split("/")[:-1]
             
             for segment in path_segments:
-                # We need to find or create folders. 
-                # If creating, we must ensure we have write access to the current parent.
-                # (Checked above for initial parent, and subsequent parents we will own/have access to)
                 existing = await Resource.find_one(
                     Resource.parent_id == target_parent_id,
                     Resource.name == segment,
@@ -63,7 +57,6 @@ class UploadService:
                 )
                 
                 if existing:
-                    # If navigating into existing folder, must have write access
                     await permission_service.verify_write_access(existing, current_user)
                     target_parent_id = existing.id
                 else:
@@ -98,8 +91,6 @@ class UploadService:
              raise HTTPException(status_code=403, detail="Storage quota exceeded. Upgrade your plan.")
 
         logger.info(f"Starting bulk upload init for {file_count} files. Total size: {total_size}. User: {current_user.id}")
-        
-        # Verify write access to root destination
         if bulk_in.parent_id:
             parent = await Resource.get(bulk_in.parent_id)
             if parent:
@@ -107,15 +98,12 @@ class UploadService:
             else:
                  raise HTTPException(status_code=404, detail="Parent folder not found")
         
-        # 1. Identify all unique folder paths required
-        # Map: "folder/subfolder" -> { "name": "subfolder", "parent_path": "folder", "depth": 1 }
         folder_paths = set()
-        file_parent_map = {} # file_index -> parent_path_string
+        file_parent_map = {}
         
         for index, file_item in enumerate(bulk_in.files):
             if file_item.relative_path and "/" in file_item.relative_path:
-                # relative_path="A/B/file.txt" -> parts=["A", "B", "file.txt"]
-                parts = file_item.relative_path.split("/")[:-1] # ["A", "B"]
+                parts = file_item.relative_path.split("/")[:-1]
                 full_path = ""
                 for part in parts:
                     parent_path = full_path
@@ -124,17 +112,12 @@ class UploadService:
                 
                 file_parent_map[index] = full_path
             else:
-                file_parent_map[index] = None # Root
+                file_parent_map[index] = None 
 
-        # 2. Level-by-level resolution
-        # Map: "path/string" -> resource_id
         resolved_ids: Dict[str, PydanticObjectId] = {}
         
-        # Sort paths by depth (folders with fewer '/' come first)
         sorted_paths = sorted(list(folder_paths), key=lambda p: p.count('/'))
         
-        # Group by depth for bulk processing
-        # depth 0: ["A", "C"], depth 1: ["A/B"]
         paths_by_depth: Dict[int, List[str]] = {}
         for path in sorted_paths:
             depth = path.count('/')
@@ -145,12 +128,9 @@ class UploadService:
         new_folders_created = 0
         all_created_resources = []
             
-        # Process each depth level
         for depth in sorted(paths_by_depth.keys()):
             paths_at_depth = paths_by_depth[depth]
             
-            # Prepare quick lookups
-            # (parent_id, folder_name) -> path_string
             lookup_keys = []
             for path in paths_at_depth:
                 parts = path.split('/')
@@ -161,14 +141,12 @@ class UploadService:
                 if parent_path:
                     parent_id = resolved_ids.get(parent_path)
                     
-                if parent_id: # Should always exist if we process by depth
+                if parent_id:
                    lookup_keys.append({"parent_id": parent_id, "name": name, "path": path})
 
             if not lookup_keys:
                 continue
 
-            # BULK FIND
-            # Construct OR query for all folders at this level
             find_conditions = []
             for item in lookup_keys:
                 find_conditions.append({
@@ -178,15 +156,12 @@ class UploadService:
                     "is_deleted": {"$ne": True}
                 })
             
-            # Execute one query for this level
             found_folders = await Resource.find({"$or": find_conditions}).to_list() if find_conditions else []
             
-            # Map found IDs
-            found_map = {} # (parent_id, name) -> user_id
+            found_map = {}
             for f in found_folders:
                 found_map[(f.parent_id, f.name)] = f.id
                 
-            # BULK CREATE MISSING
             to_insert = []
             
             for item in lookup_keys:
@@ -194,7 +169,6 @@ class UploadService:
                 if key in found_map:
                     resolved_ids[item["path"]] = found_map[key]
                 else:
-                    # Prepare for insert
                     new_id = PydanticObjectId()
                     new_folder = Resource(
                         id=new_id,
@@ -206,22 +180,17 @@ class UploadService:
                     to_insert.append((item["path"], new_folder))
             
             if to_insert:
-                # Extract resource objects
                 resources_to_create = [x[1] for x in to_insert]
                 await Resource.insert_many(resources_to_create)
                 new_folders_created += len(resources_to_create)
                 all_created_resources.extend(resources_to_create)
                 
-                # Update map with new IDs
                 for path, res in to_insert:
                     resolved_ids[path] = res.id
             
-            # logger.info(f"Depth {depth}: Resolved {len(lookup_keys)} folders (Found {len(found_map)}, Created {len(to_insert)})")
-
         if new_folders_created > 0:
             await self._invalidate_tree_cache(current_user.id)
 
-        # 3. Generate Responses with resolved IDs
         responses = []
         for index, file_item in enumerate(bulk_in.files):
             target_parent_id = bulk_in.parent_id
@@ -233,8 +202,6 @@ class UploadService:
             resource_id = PydanticObjectId()
             s3_key = f"{current_user.id}/{resource_id}/{file_item.file_name}"    
             
-            # We assume S3 sign is fast enough now that we removed sleeps/latency, 
-            # if strictly needed we can batch sign too but boto3 is purely local.
             url = s3_service.generate_presigned_url(s3_key, file_item.file_type)
             
             responses.append(FileUploadResponse(
@@ -262,15 +229,9 @@ class UploadService:
             else:
                 raise HTTPException(status_code=404, detail="Parent folder not found")
 
-        # Verify S3 Object Exists and Size matches
         try:
              s3_meta = s3_service.head_object(confirm_in.s3_key)
-             # Basic sanity check: size. s3_meta['ContentLength']
              if s3_meta['ContentLength'] != confirm_in.size:
-                 # Just a warning or strict? Let's log it but maybe allow if it's close? 
-                 # For security, strict is better, but multipart uploads might vary slightly? 
-                 # No, usually exact. 
-                 # But let's just ensure it DOES exist.
                  pass
         except Exception as e:
              logger.error(f"S3 Verification Failed: {str(e)}")
@@ -287,7 +248,6 @@ class UploadService:
         )
         await new_file.create()
         
-        # Update usage
         current_user.storage_used += confirm_in.size
         await current_user.save()
         

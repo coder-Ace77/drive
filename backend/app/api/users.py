@@ -15,8 +15,6 @@ async def search_users(
     q: str = Query(..., min_length=1),
     current_user: User = Depends(get_current_user)
 ):
-    # Prefix search using regex
-    # Case insensitive
     users = await User.find(
         {"username": {"$regex": f"^{q}", "$options": "i"}}
     ).limit(5).to_list()

@@ -22,11 +22,9 @@ export const useDriveUpload = (
 
     const abortControllerRef = useRef<AbortController | null>(null);
 
-    // Dynamic concurrency state
     const concurrencyRef = useRef(3);
     const activeUploadsRef = useRef(0);
 
-    // Load session on mount
     useEffect(() => {
         const saved = localStorage.getItem('upload_session');
         if (saved) {
@@ -50,8 +48,6 @@ export const useDriveUpload = (
         if (fileArray.length === 0) return;
         const targetId = isResume && resumableSession ? resumableSession.targetFolderId : currentFolderId;
         if (!targetId) return;
-
-        // Reset controller for new upload
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
         }
@@ -72,7 +68,7 @@ export const useDriveUpload = (
         }
 
         setIsUploading(true);
-        concurrencyRef.current = 3; // Reset start concurrency
+        concurrencyRef.current = 3; 
         activeUploadsRef.current = 0;
 
         const toastId = toast.loading(isResume ? `Resuming upload...` : `Preparing upload...`);
@@ -109,10 +105,7 @@ export const useDriveUpload = (
                 applyDelta(initRes.delta);
             }
 
-            // Dimiss the loading toast so we don't have overlays. Use the UI bar for progress.
             toast.dismiss(toastId);
-
-            // Queue Setup
             const queue = pendingFiles.map((file, i) => ({
                 file,
                 config: uploadConfigs[i],
@@ -126,18 +119,17 @@ export const useDriveUpload = (
             const processQueue = async () => {
                 if (abortControllerRef.current?.signal.aborted) return;
 
-                // Spawn workers until limit reached or queue empty
                 while (
                     queue.length > 0 &&
                     activeUploadsRef.current < concurrencyRef.current &&
                     !abortControllerRef.current?.signal.aborted
-                ) {
+                ) {            // Kickoff
+
                     const item = queue.shift();
                     if (!item) break;
 
                     activeUploadsRef.current++;
 
-                    // Upload Item Function
                     const uploadItem = async () => {
                         try {
                             await axios.put(item.config.url, item.file, {
@@ -151,8 +143,6 @@ export const useDriveUpload = (
                                         if (timeDiff > 0) {
                                             const speedBytesPerSec = loadedDiff / timeDiff;
                                             const speedMBPerSec = (speedBytesPerSec / (1024 * 1024)).toFixed(1);
-                                            // Optional: Show Active Concurrency in UI for debug/fun? 
-                                            // setUploadSpeed(`${speedMBPerSec} MB/s (C:${concurrencyRef.current})`);
                                             setUploadSpeed(`${speedMBPerSec} MB/s`);
                                             lastLoaded = progressEvent.loaded;
                                             lastTime = now;
@@ -179,9 +169,6 @@ export const useDriveUpload = (
                             session!.completedPaths.push(item.path);
                             localStorage.setItem('upload_session', JSON.stringify(session));
                             setResumableSession({ ...session! });
-
-                            // Success - Ramp Up
-                            // Limit max concurrency to 10 for browser sanity
                             if (concurrencyRef.current < 10) {
                                 concurrencyRef.current += 1;
                             }
@@ -190,25 +177,18 @@ export const useDriveUpload = (
                             if (axios.isCancel(err)) throw err;
                             console.error(`Failed to upload ${item.file.name}`, err);
                             toast.error(`Error uploading ${item.file.name}`);
-
-                            // Failure - Ramp Down
                             concurrencyRef.current = Math.max(1, Math.floor(concurrencyRef.current / 2));
                         } finally {
                             activeUploadsRef.current--;
-                            processQueue(); // Trigger next
+                            processQueue(); 
                         }
                     };
-
-                    // Start the upload without awaiting it here (fire and forget / independent promise)
                     uploadItem().catch(err => {
                         if (axios.isCancel(err) || (err as Error).message === 'Upload cancelled') {
-                            // Handled globally
                         }
                     });
                 }
 
-                // Completion Check
-                // We are done if queue is empty AND no active uploads
                 if (queue.length === 0 && activeUploadsRef.current === 0) {
                     if (!abortControllerRef.current?.signal.aborted) {
                         localStorage.removeItem('upload_session');
@@ -219,7 +199,6 @@ export const useDriveUpload = (
                 }
             };
 
-            // Kickoff
             processQueue();
 
         } catch (err) {

@@ -37,8 +37,6 @@ export const useDriveOperations = ({
         try {
             const res = await driveService.deleteItem(itemId);
             applyDelta(res);
-            // DrivePage handles toast promise for single item delete usually, or we can do it here.
-            // But preserving existing behavior: just return the promise/result so caller can toast.promise it.
             return res;
         } catch (err) {
             throw err;

@@ -126,7 +126,6 @@ const DrivePage = () => {
       await createFolder(folderName);
       setIsCreateFolderOpen(false);
     } catch (e) {
-      // toast handled in hook
     }
   };
 

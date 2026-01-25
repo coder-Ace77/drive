@@ -13,7 +13,6 @@ const EditorPage = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
-    // Fetch file content
     useEffect(() => {
         const fetchContent = async () => {
             if (!id) return;
@@ -55,7 +54,6 @@ const EditorPage = () => {
         }
     };
 
-    // Keyboard shortcut
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -72,7 +70,6 @@ const EditorPage = () => {
 
     return (
         <div className="flex flex-col h-screen bg-[#1e1e1e] text-white overflow-hidden">
-            {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 bg-[#2d2d2d] border-b border-[#3e3e3e] shadow-sm">
                 <div className="flex items-center gap-4">
                     <button
@@ -103,11 +100,10 @@ const EditorPage = () => {
                 </div>
             </div>
 
-            {/* Editor */}
             <div className="flex-1 overflow-hidden">
                 <Editor
                     height="100%"
-                    defaultLanguage="plaintext" // We need to detect this!
+                    defaultLanguage="plaintext"
                     language="plaintext"
                     theme="vs-dark"
                     value={content}

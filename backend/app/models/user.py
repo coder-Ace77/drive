@@ -18,8 +18,8 @@ class User(Document):
     @property
     def storage_limit(self) -> int:
         if self.plan == UserPlan.PRO:
-             return 2 * 1024 * 1024 * 1024 # 2 GB
-        return 250 * 1024 * 1024 # 250 MB
+             return 2 * 1024 * 1024 * 1024
+        return 250 * 1024 * 1024
 
     class Settings:
         name = "users"

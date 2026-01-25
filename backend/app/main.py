@@ -2,21 +2,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-
 from app.core.config import get_settings
 from app.core.database import init_db
 from app.api.router import api_router
-
-settings = get_settings()
-
 from app.services.cleanup_service import cleanup_service
 import asyncio
+
+logging.basicConfig(level=logging.INFO,format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",)
+
+settings = get_settings()
 
 async def run_cleanup_periodically():
     while True:
@@ -32,12 +26,8 @@ async def run_cleanup_periodically():
 async def lifespan(app: FastAPI):
     await init_db()
     
-    # Start background task
     cleanup_task = asyncio.create_task(run_cleanup_periodically())
-    
-    yield
-    
-    # Cancel background task on shutdown
+    yield    
     cleanup_task.cancel()
     try:
         await cleanup_task
@@ -45,13 +35,13 @@ async def lifespan(app: FastAPI):
         pass
 
 app = FastAPI(
-    title="Enterprise Drive Backend",
+    title="Drive Backend",
     lifespan=lifespan
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=[settings.allowed_origin], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
