@@ -3,10 +3,12 @@ import AuthPage from './pages/AuthPage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import DrivePage from './pages/DrivePage';
 import EditorPage from './pages/EditorPage';
+import { BackendDisclaimer } from './components/BackendDisclaimer';
 
 function App() {
   return (
     <Router>
+      <BackendDisclaimer />
       <Routes>
         <Route element={<ProtectedRoute />}>
           <Route path="/drive" element={<DrivePage />} />
